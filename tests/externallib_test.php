@@ -19,10 +19,15 @@ namespace auth_userkey;
 use advanced_testcase;
 use webservice_access_exception;
 use auth_userkey_external;
-use external_api;
+use core_external\external_api;
 use invalid_parameter_exception;
 use required_capability_exception;
 use context_system;
+
+global $CFG;
+
+require_once($CFG->dirroot . '/webservice/lib.php');
+require_once($CFG->dirroot . '/auth/userkey/externallib.php');
 
 /**
  * Tests for externallib.php.
@@ -46,9 +51,6 @@ class externallib_test extends advanced_testcase {
      */
     public function setUp(): void {
         global $CFG;
-
-        require_once($CFG->libdir . "/externallib.php");
-        require_once($CFG->dirroot . '/auth/userkey/externallib.php');
 
         $this->resetAfterTest();
 

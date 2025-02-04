@@ -21,7 +21,7 @@ use auth_plugin_userkey;
 use stdClass;
 use invalid_parameter_exception;
 use moodle_exception;
-use external_value;
+use core_external\external_value;
 
 /**
  * Tests for auth_plugin_userkey class.
@@ -57,7 +57,6 @@ class auth_plugin_test extends advanced_testcase {
     public function setUp(): void {
         global $CFG;
 
-        require_once($CFG->libdir . "/externallib.php");
         require_once($CFG->dirroot . '/auth/userkey/tests/fake_userkey_manager.php');
         require_once($CFG->dirroot . '/auth/userkey/auth.php');
         require_once($CFG->dirroot . '/user/lib.php');
@@ -839,7 +838,7 @@ class auth_plugin_test extends advanced_testcase {
         } catch (moodle_exception $e) {
             $this->assertEquals($this->user->id, $USER->id);
             $this->assertSame(sesskey(), $USER->sesskey);
-            $this->assertObjectHasAttribute('userkey', $SESSION);
+            $this->assertObjectHasProperty('userkey', $SESSION);
         }
     }
 
@@ -978,7 +977,7 @@ class auth_plugin_test extends advanced_testcase {
         } catch (moodle_exception $e) {
             $this->assertEquals($this->user->id, $USER->id);
             $this->assertSame(sesskey(), $USER->sesskey);
-            $this->assertObjectHasAttribute('userkey', $SESSION);
+            $this->assertObjectHasProperty('userkey', $SESSION);
         }
     }
 
@@ -1025,7 +1024,7 @@ class auth_plugin_test extends advanced_testcase {
         } catch (moodle_exception $e) {
             $this->assertEquals($this->user->id, $USER->id);
             $this->assertSame(sesskey(), $USER->sesskey);
-            $this->assertObjectNotHasAttribute('userkey', $SESSION);
+            $this->assertObjectNotHasProperty('userkey', $SESSION);
             $keyexists = $DB->record_exists('user_private_key', array('value' => 'TestKey'));
             $this->assertFalse($keyexists);
         }
