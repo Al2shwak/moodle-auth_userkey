@@ -30,7 +30,7 @@ if ($ADMIN->fulltree) {
 
     $settings->add(new admin_setting_configselect('auth_userkey/mappingfield',
         new lang_string('mappingfield', 'auth_userkey'),
-        new lang_string('mappingfield_desc', 'auth_userkey'), 0, $fields));
+        new lang_string('mappingfield_desc', 'auth_userkey'), auth_plugin_userkey::DEFAULT_MAPPING_FIELD, $fields));
 
     $settings->add(new admin_setting_configtext('auth_userkey/keylifetime', get_string('keylifetime', 'auth_userkey'),
             get_string('keylifetime_desc', 'auth_userkey', 'auth'),
