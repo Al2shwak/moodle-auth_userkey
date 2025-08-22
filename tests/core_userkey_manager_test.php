@@ -57,12 +57,12 @@ final class core_userkey_manager_test extends \advanced_testcase {
 
     /**
      * Core validate function used for testing validate_iprestriction.
+     * @param string $allowips Allow ips.
      * @param string $script Script.
      * @param ?string $iprestriction Ips restriction list.
      * @param int $keylifetime Key lifetime.
-     * @param string $allowips Allow ips.
-     * @throws \dml_exception
      * @return void
+     * @throws \dml_exception
      */
     private function validate_iprestriction(string $allowips = '', string $script = 'auth/userkey', ?string $iprestriction = null,
                                             int $keylifetime = 60): void {
