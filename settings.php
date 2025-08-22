@@ -25,43 +25,81 @@
 defined('MOODLE_INTERNAL') || die;
 
 if ($ADMIN->fulltree) {
-    $yesno = array(get_string('no'), get_string('yes'));
+    $yesno = [get_string('no'), get_string('yes')];
     $fields = get_auth_plugin('userkey')->get_allowed_mapping_fields();
 
-    $settings->add(new admin_setting_configselect('auth_userkey/mappingfield',
+    $settings->add(new admin_setting_configselect(
+        'auth_userkey/mappingfield',
         new lang_string('mappingfield', 'auth_userkey'),
-        new lang_string('mappingfield_desc', 'auth_userkey'), auth_plugin_userkey::DEFAULT_MAPPING_FIELD, $fields));
+        new lang_string('mappingfield_desc', 'auth_userkey'),
+        auth_plugin_userkey::DEFAULT_MAPPING_FIELD,
+        $fields
+    ));
 
-    $settings->add(new admin_setting_configtext('auth_userkey/keylifetime', get_string('keylifetime', 'auth_userkey'),
-            get_string('keylifetime_desc', 'auth_userkey', 'auth'),
-            '60', PARAM_INT));
+    $settings->add(new admin_setting_configtext(
+        'auth_userkey/keylifetime',
+        get_string('keylifetime', 'auth_userkey'),
+        get_string('keylifetime_desc', 'auth_userkey', 'auth'),
+        '60',
+        PARAM_INT
+    ));
 
-    $settings->add(new admin_setting_configselect('auth_userkey/iprestriction',
-            new lang_string('iprestriction', 'auth_userkey'),
-            new lang_string('iprestriction_desc', 'auth_userkey'), 0, $yesno));
+    $settings->add(new admin_setting_configselect(
+        'auth_userkey/iprestriction',
+        new lang_string('iprestriction', 'auth_userkey'),
+        new lang_string('iprestriction_desc', 'auth_userkey'),
+        0,
+        $yesno
+    ));
 
-    $settings->add(new admin_setting_configtext('auth_userkey/ipwhitelist', get_string('ipwhitelist', 'auth_userkey'),
-            get_string('ipwhitelist_desc', 'auth_userkey', 'auth'),
-            '', PARAM_TEXT));
+    $settings->add(new admin_setting_configtext(
+        'auth_userkey/ipwhitelist',
+        get_string('ipwhitelist', 'auth_userkey'),
+        get_string('ipwhitelist_desc', 'auth_userkey', 'auth'),
+        '',
+        PARAM_TEXT
+    ));
 
-    $settings->add(new admin_setting_configtext('auth_userkey/redirecturl', get_string('redirecturl', 'auth_userkey'),
-            get_string('redirecturl_desc', 'auth_userkey', 'auth'),
-            '', PARAM_URL));
+    $settings->add(new admin_setting_configtext(
+        'auth_userkey/redirecturl',
+        get_string('redirecturl', 'auth_userkey'),
+        get_string('redirecturl_desc', 'auth_userkey', 'auth'),
+        '',
+        PARAM_URL
+    ));
 
-    $settings->add(new admin_setting_configtext('auth_userkey/ssourl', get_string('ssourl', 'auth_userkey'),
-            get_string('ssourl_desc', 'auth_userkey', 'auth'),
-            '', PARAM_URL));
+    $settings->add(new admin_setting_configtext(
+        'auth_userkey/ssourl',
+        get_string('ssourl', 'auth_userkey'),
+        get_string('ssourl_desc', 'auth_userkey', 'auth'),
+        '',
+        PARAM_URL
+    ));
 
-    $settings->add(new admin_setting_configselect('auth_userkey/createuser',
-            new lang_string('createuser', 'auth_userkey'),
-            new lang_string('createuser_desc', 'auth_userkey'), 0, $yesno));
+    $settings->add(new admin_setting_configselect(
+        'auth_userkey/createuser',
+        new lang_string('createuser', 'auth_userkey'),
+        new lang_string('createuser_desc', 'auth_userkey'),
+        0,
+        $yesno
+    ));
 
-    $settings->add(new admin_setting_configselect('auth_userkey/updateuser',
-            new lang_string('updateuser', 'auth_userkey'),
-            new lang_string('updateuser_desc', 'auth_userkey'), 0, $yesno));
+    $settings->add(new admin_setting_configselect(
+        'auth_userkey/updateuser',
+        new lang_string('updateuser', 'auth_userkey'),
+        new lang_string('updateuser_desc', 'auth_userkey'),
+        0,
+        $yesno
+    ));
 
     // Display locking / mapping of profile fields.
     $authplugin = get_auth_plugin('userkey');
-    display_auth_lock_options($settings, $authplugin->authtype,
-        $authplugin->userfields, get_string('auth_fieldlocks_help', 'auth'), false, false);
+    display_auth_lock_options(
+        $settings,
+        $authplugin->authtype,
+        $authplugin->userfields,
+        get_string('auth_fieldlocks_help', 'auth'),
+        false,
+        false
+    );
 }

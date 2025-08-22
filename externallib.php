@@ -39,7 +39,6 @@ require_once($CFG->dirroot . "/auth/userkey/auth.php");
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class auth_userkey_external extends external_api {
-
     /**
      * Return request_login_url webservice parameters.
      *
@@ -47,11 +46,11 @@ class auth_userkey_external extends external_api {
      */
     public static function request_login_url_parameters() {
         return new external_function_parameters(
-            array(
+            [
                 'user' => new external_single_structure(
                     get_auth_plugin('userkey')->get_request_login_url_user_parameters()
-                )
-            )
+                ),
+            ]
         );
     }
 
@@ -77,9 +76,9 @@ class auth_userkey_external extends external_api {
         $auth = get_auth_plugin('userkey');
         $loginurl = $auth->get_login_url($user);
 
-        return array(
+        return [
             'loginurl' => $loginurl,
-        );
+        ];
     }
 
     /**
@@ -89,10 +88,9 @@ class auth_userkey_external extends external_api {
      */
     public static function request_login_url_returns() {
         return new external_single_structure(
-            array(
+            [
                 'loginurl' => new external_value(PARAM_RAW, 'Login URL for a user to log in'),
-            )
+            ]
         );
     }
-
 }

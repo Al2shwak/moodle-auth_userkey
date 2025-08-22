@@ -24,21 +24,21 @@
 
 defined('MOODLE_INTERNAL') || die;
 
-$functions = array(
-    'auth_userkey_request_login_url' => array(
+$functions = [
+    'auth_userkey_request_login_url' => [
         'classname'   => 'auth_userkey_external',
         'methodname'  => 'request_login_url',
         'classpath'   => 'auth/userkey/externallib.php',
         'description' => 'Return one time key based login URL',
         'type'        => 'write',
         'capabilities'  => 'auth/userkey:generatekey',
-    )
-);
+    ],
+];
 
-$services = array(
-    'User key authentication web service' => array(
-        'functions' => array ('auth_userkey_request_login_url'),
+$services = [
+    'User key authentication web service' => [
+        'functions' => ['auth_userkey_request_login_url'],
         'restrictedusers' => 1,
         'enabled' => 1,
-    )
-);
+    ],
+];

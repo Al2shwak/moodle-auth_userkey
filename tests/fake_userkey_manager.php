@@ -24,7 +24,6 @@ namespace auth_userkey;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class fake_userkey_manager implements userkey_manager_interface {
-
     /**
      * Create key.
      *

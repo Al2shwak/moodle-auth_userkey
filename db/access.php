@@ -24,13 +24,13 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$capabilities = array(
-    'auth/userkey:generatekey' => array(
-        'riskbitmask' => RISK_PERSONAL | RISK_SPAM | RISK_XSS ,
+$capabilities = [
+    'auth/userkey:generatekey' => [
+        'riskbitmask' => RISK_PERSONAL | RISK_SPAM | RISK_XSS,
 
         'captype' => 'write',
         'contextlevel' => CONTEXT_SYSTEM,
-        'archetypes' => array(
-        ),
-    ),
-);
+        'archetypes' => [
+        ],
+    ],
+];

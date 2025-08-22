@@ -24,7 +24,6 @@ namespace auth_userkey;
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class core_userkey_manager implements userkey_manager_interface {
-
     /**
      * This script script required by core create_user_key().
      */
@@ -108,10 +107,10 @@ class core_userkey_manager implements userkey_manager_interface {
     public function validate_key($keyvalue) {
         global $DB;
 
-        $options = array(
+        $options = [
             'script' => self::CORE_USER_KEY_MANAGER_SCRIPT,
-            'value' => $keyvalue
-        );
+            'value' => $keyvalue,
+        ];
 
         if (!$key = $DB->get_record('user_private_key', $options)) {
             throw new \moodle_exception('invalidkey');
@@ -123,7 +122,7 @@ class core_userkey_manager implements userkey_manager_interface {
 
         $this->validate_ip_address($key);
 
-        if (!$user = $DB->get_record('user', array('id' => $key->userid))) {
+        if (!$user = $DB->get_record('user', ['id' => $key->userid])) {
             throw new \moodle_exception('invaliduserid');
         }
         return $key;

@@ -15,6 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace auth_userkey;
+defined('MOODLE_INTERNAL') || die();
 
 use advanced_testcase;
 use webservice_access_exception;
@@ -23,9 +24,7 @@ use core_external\external_api;
 use invalid_parameter_exception;
 use required_capability_exception;
 use context_system;
-
 global $CFG;
-
 require_once($CFG->dirroot . '/webservice/lib.php');
 require_once($CFG->dirroot . '/auth/userkey/externallib.php');
 
@@ -38,23 +37,24 @@ require_once($CFG->dirroot . '/auth/userkey/externallib.php');
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class externallib_test extends advanced_testcase {
+final class externallib_test extends advanced_testcase {
     /**
      * User object.
      *
-     * @var
+     * @var $user.
      */
-    protected $user = array();
+    protected $user = [];
 
     /**
      * Initial set up.
      */
     public function setUp(): void {
         global $CFG;
+        parent::setUp();
 
         $this->resetAfterTest();
 
-        $user = array();
+        $user = [];
         $user['username'] = 'username';
         $user['email'] = 'exists@test.com';
         $user['idnumber'] = 'idnumber';
@@ -64,12 +64,12 @@ class externallib_test extends advanced_testcase {
     /**
      * Test call with incorrect required parameter.
      */
-    public function test_throwing_plugin_disabled_exception() {
+    public function test_throwing_plugin_disabled_exception(): void {
         $this->setAdminUser();
 
-        $params = array(
+        $params = [
             'bla' => 'exists@test.com',
-        );
+        ];
 
         $this->expectException(webservice_access_exception::class);
         $this->expectExceptionMessage('Access control exception (The userkey authentication plugin is disabled.)');
@@ -82,22 +82,22 @@ class externallib_test extends advanced_testcase {
     /**
      * Test successful web service calls.
      */
-    public function test_successful_webservice_calls() {
+    public function test_successful_webservice_calls(): void {
         global $DB, $CFG;
 
         $CFG->auth = "userkey";
         $this->setAdminUser();
 
         // Email.
-        $params = array(
+        $params = [
             'email' => 'exists@test.com',
-        );
+        ];
 
         // Simulate the web service server.
         $result = auth_userkey_external::request_login_url($params);
         $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
 
-        $actualkey = $DB->get_record('user_private_key', array('userid' => $this->user->id));
+        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
 
         $this->assertTrue(is_array($result));
@@ -106,15 +106,15 @@ class externallib_test extends advanced_testcase {
 
         // Username.
         set_config('mappingfield', 'username', 'auth_userkey');
-        $params = array(
+        $params = [
             'username' => 'username',
-        );
+        ];
 
         // Simulate the web service server.
         $result = auth_userkey_external::request_login_url($params);
         $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
 
-        $actualkey = $DB->get_record('user_private_key', array('userid' => $this->user->id));
+        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
 
         $this->assertTrue(is_array($result));
@@ -123,15 +123,15 @@ class externallib_test extends advanced_testcase {
 
         // Idnumber.
         set_config('mappingfield', 'idnumber', 'auth_userkey');
-        $params = array(
+        $params = [
             'idnumber' => 'idnumber',
-        );
+        ];
 
         // Simulate the web service server.
         $result = auth_userkey_external::request_login_url($params);
         $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
 
-        $actualkey = $DB->get_record('user_private_key', array('userid' => $this->user->id));
+        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
 
         $this->assertTrue(is_array($result));
@@ -141,16 +141,16 @@ class externallib_test extends advanced_testcase {
         // IP restriction.
         set_config('iprestriction', true, 'auth_userkey');
         set_config('mappingfield', 'idnumber', 'auth_userkey');
-        $params = array(
+        $params = [
             'idnumber' => 'idnumber',
             'ip' => '192.168.1.1',
-        );
+        ];
 
         // Simulate the web service server.
         $result = auth_userkey_external::request_login_url($params);
         $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
 
-        $actualkey = $DB->get_record('user_private_key', array('userid' => $this->user->id));
+        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
 
         $this->assertTrue(is_array($result));
@@ -161,15 +161,15 @@ class externallib_test extends advanced_testcase {
     /**
      * Test call with missing email required parameter.
      */
-    public function test_exception_thrown_if_required_parameter_email_is_not_set() {
+    public function test_exception_thrown_if_required_parameter_email_is_not_set(): void {
         global $CFG;
 
         $this->setAdminUser();
         $CFG->auth = "userkey";
 
-        $params = array(
+        $params = [
             'bla' => 'exists@test.com',
-        );
+        ];
 
         $this->expectException(invalid_parameter_exception::class);
         $this->expectExceptionMessage('Invalid parameter value detected (Required field "email" is not set or empty.)');
@@ -180,7 +180,7 @@ class externallib_test extends advanced_testcase {
     /**
      * Test call with missing ip required parameter.
      */
-    public function test_exception_thrown_if_required_parameter_op_is_not_set() {
+    public function test_exception_thrown_if_required_parameter_op_is_not_set(): void {
         global $CFG;
 
         $this->setAdminUser();
@@ -188,9 +188,9 @@ class externallib_test extends advanced_testcase {
 
         set_config('iprestriction', true, 'auth_userkey');
 
-        $params = array(
+        $params = [
             'email' => 'exists@test.com',
-        );
+        ];
 
         $this->expectException(invalid_parameter_exception::class);
         $this->expectExceptionMessage('Invalid parameter value detected (Required parameter "ip" is not set.)');
@@ -201,15 +201,15 @@ class externallib_test extends advanced_testcase {
     /**
      * Test request for a user who is not exist.
      */
-    public function test_request_not_existing_user() {
+    public function test_request_not_existing_user(): void {
         global $CFG;
 
         $this->setAdminUser();
         $CFG->auth = "userkey";
 
-        $params = array(
+        $params = [
             'email' => 'notexists@test.com',
-        );
+        ];
 
         $this->expectException(invalid_parameter_exception::class);
         $this->expectExceptionMessage('Invalid parameter value detected (User is not exist)');
@@ -222,15 +222,15 @@ class externallib_test extends advanced_testcase {
     /**
      * Test that permission exception gets thrown if user doesn't have required permissions.
      */
-    public function test_throwing_of_permission_exception() {
+    public function test_throwing_of_permission_exception(): void {
         global $CFG;
 
         $this->setUser($this->user);
         $CFG->auth = "userkey";
 
-        $params = array(
+        $params = [
             'email' => 'notexists@test.com',
-        );
+        ];
 
         $this->expectException(required_capability_exception::class);
         $this->expectExceptionMessage('Sorry, but you do not currently have permissions to do that (Generate login user key)');
@@ -243,26 +243,26 @@ class externallib_test extends advanced_testcase {
     /**
      * Test request gets executed correctly if use has required permissions.
      */
-    public function test_request_gets_executed_if_user_has_permission() {
+    public function test_request_gets_executed_if_user_has_permission(): void {
         global $CFG, $DB;
 
         $this->setUser($this->user);
         $CFG->auth = "userkey";
 
         $context = context_system::instance();
-        $studentrole = $DB->get_record('role', array('shortname' => 'student'), '*', MUST_EXIST);
+        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
         assign_capability('auth/userkey:generatekey', CAP_ALLOW, $studentrole->id, $context->id);
         role_assign($studentrole->id, $this->user->id, $context->id);
 
-        $params = array(
+        $params = [
             'email' => 'exists@test.com',
-        );
+        ];
 
         // Simulate the web service server.
         $result = auth_userkey_external::request_login_url($params);
         $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
 
-        $actualkey = $DB->get_record('user_private_key', array('userid' => $this->user->id));
+        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
 
         $this->assertTrue(is_array($result));
