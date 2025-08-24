@@ -57,5 +57,4 @@ interface userkey_manager_interface {
      * @throws \moodle_exception If provided key is not valid.
      */
     public function validate_key($keyvalue);
-
 }

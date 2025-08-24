@@ -35,7 +35,6 @@ use core_privacy\local\legacy_polyfill;
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class provider implements null_provider {
-
     use legacy_polyfill;
 
     /**
@@ -47,5 +46,4 @@ class provider implements null_provider {
     public static function _get_reason() {
         return 'privacy:metadata';
     }
-
 }

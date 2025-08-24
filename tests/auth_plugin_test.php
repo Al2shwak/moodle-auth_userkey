@@ -32,7 +32,7 @@ use core_external\external_value;
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class auth_plugin_test extends advanced_testcase {
+final class auth_plugin_test extends advanced_testcase {
     /**
      * An instance of auth_plugin_userkey class.
      * @var auth_plugin_userkey
@@ -41,7 +41,7 @@ class auth_plugin_test extends advanced_testcase {
 
     /**
      * User object.
-     * @var
+     * @var $user
      */
     protected $user;
 
@@ -109,7 +109,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that users can't login using login form.
      */
-    public function test_users_can_not_login_using_login_form() {
+    public function test_users_can_not_login_using_login_form(): void {
         $user = new stdClass();
         $user->auth = 'userkey';
         $user->username = 'username';
@@ -124,28 +124,28 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that the plugin doesn't allow to store users passwords.
      */
-    public function test_auth_plugin_does_not_allow_to_store_passwords() {
+    public function test_auth_plugin_does_not_allow_to_store_passwords(): void {
         $this->assertTrue($this->auth->prevent_local_passwords());
     }
 
     /**
      * Test that the plugin is external.
      */
-    public function test_auth_plugin_is_external() {
+    public function test_auth_plugin_is_external(): void {
         $this->assertFalse($this->auth->is_internal());
     }
 
     /**
      * Test that the plugin doesn't allow users to change the passwords.
      */
-    public function test_auth_plugin_does_not_allow_to_change_passwords() {
+    public function test_auth_plugin_does_not_allow_to_change_passwords(): void {
         $this->assertFalse($this->auth->can_change_password());
     }
 
     /**
      * Test that default mapping field gets returned correctly.
      */
-    public function test_get_default_mapping_field() {
+    public function test_get_default_mapping_field(): void {
         $expected = 'email';
         $actual = $this->auth->get_mapping_field();
 
@@ -155,7 +155,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that logout page hook sets global redirect variable correctly.
      */
-    public function test_logoutpage_hook_sets_global_redirect_correctly() {
+    public function test_logoutpage_hook_sets_global_redirect_correctly(): void {
         global $redirect, $SESSION;
 
         $this->auth->logoutpage_hook();
@@ -182,7 +182,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that configured mapping field gets returned correctly.
      */
-    public function test_get_mapping_field() {
+    public function test_get_mapping_field(): void {
         set_config('mappingfield', 'username', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
 
@@ -195,8 +195,8 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that auth plugin throws correct exception if default mapping field is not provided.
      */
-    public function test_throwing_exception_if_default_mapping_field_is_not_provided() {
-        $user = array();
+    public function test_throwing_exception_if_default_mapping_field_is_not_provided(): void {
+        $user = [];
         $this->expectException(invalid_parameter_exception::class);
         $this->expectExceptionMessage('Invalid parameter value detected (Required field "email" is not set or empty.)');
 
@@ -206,8 +206,8 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that auth plugin throws correct exception if username mapping field is not provided, but set in configs.
      */
-    public function test_throwing_exception_if_mapping_field_username_is_not_provided() {
-        $user = array();
+    public function test_throwing_exception_if_mapping_field_username_is_not_provided(): void {
+        $user = [];
         set_config('mappingfield', 'username', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
 
@@ -220,8 +220,8 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that auth plugin throws correct exception if idnumber mapping field is not provided, but set in configs.
      */
-    public function test_throwing_exception_if_mapping_field_idnumber_is_not_provided() {
-        $user = array();
+    public function test_throwing_exception_if_mapping_field_idnumber_is_not_provided(): void {
+        $user = [];
         set_config('mappingfield', 'idnumber', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
 
@@ -234,8 +234,8 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that auth plugin throws correct exception if we trying to request not existing user.
      */
-    public function test_throwing_exception_if_user_is_not_exist() {
-        $user = array();
+    public function test_throwing_exception_if_user_is_not_exist(): void {
+        $user = [];
         $user['email'] = 'notexists@test.com';
 
         $this->expectException(invalid_parameter_exception::class);
@@ -247,8 +247,8 @@ class auth_plugin_test extends advanced_testcase {
      * Test that auth plugin throws correct exception if we trying to request user,
      * but ip field is not set and iprestriction is enabled.
      */
-    public function test_throwing_exception_if_iprestriction_is_enabled_but_ip_is_missing_in_data() {
-        $user = array();
+    public function test_throwing_exception_if_iprestriction_is_enabled_but_ip_is_missing_in_data(): void {
+        $user = [];
         $user['email'] = 'exists@test.com';
         set_config('iprestriction', true, 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
@@ -262,10 +262,10 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that we can request a user provided user data as an array.
      */
-    public function test_return_correct_login_url_if_user_is_array() {
+    public function test_return_correct_login_url_if_user_is_array(): void {
         global $CFG;
 
-        $user = array();
+        $user = [];
         $user['username'] = 'username';
         $user['email'] = 'exists@test.com';
 
@@ -283,7 +283,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that we can request a user provided user data as an object.
      */
-    public function test_return_correct_login_url_if_user_is_object() {
+    public function test_return_correct_login_url_if_user_is_object(): void {
         global $CFG;
 
         $user = new stdClass();
@@ -304,7 +304,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that we can request a user provided user data as an object.
      */
-    public function test_return_correct_login_url_if_iprestriction_is_enabled_and_data_is_correct() {
+    public function test_return_correct_login_url_if_iprestriction_is_enabled_and_data_is_correct(): void {
         global $CFG;
 
         $user = new stdClass();
@@ -326,7 +326,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that we can request a key for a new user.
      */
-    public function test_return_correct_login_url_and_create_new_user() {
+    public function test_return_correct_login_url_and_create_new_user(): void {
         global $CFG, $DB;
 
         set_config('createuser', true, 'auth_userkey');
@@ -358,7 +358,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that we can request a key for a new user.
      */
-    public function test_missing_data_to_create_user() {
+    public function test_missing_data_to_create_user(): void {
         global $CFG, $DB;
 
         set_config('createuser', true, 'auth_userkey');
@@ -380,7 +380,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that when we attempt to create a new user duplicate usernames are caught.
      */
-    public function test_create_refuse_duplicate_username() {
+    public function test_create_refuse_duplicate_username(): void {
         set_config('createuser', true, 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
 
@@ -409,7 +409,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that when we attempt to create a new user duplicate emails are caught.
      */
-    public function test_create_refuse_duplicate_email() {
+    public function test_create_refuse_duplicate_email(): void {
         set_config('createuser', true, 'auth_userkey');
         set_config('mappingfield', 'username', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
@@ -439,7 +439,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that we can request a key for an existing user and update their details.
      */
-    public function test_return_correct_login_url_and_update_user() {
+    public function test_return_correct_login_url_and_update_user(): void {
         global $CFG, $DB;
 
         set_config('updateuser', true, 'auth_userkey');
@@ -481,7 +481,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that when we attempt to update a user duplicate emails are caught.
      */
-    public function test_update_refuse_duplicate_email() {
+    public function test_update_refuse_duplicate_email(): void {
         set_config('updateuser', true, 'auth_userkey');
         set_config('mappingfield', 'username', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
@@ -509,7 +509,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that when we attempt to update a user duplicate usernames are caught.
      */
-    public function test_update_refuse_duplicate_username() {
+    public function test_update_refuse_duplicate_username(): void {
         set_config('updateuser', true, 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
 
@@ -536,10 +536,10 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that we can get login url if we do not use fake keymanager.
      */
-    public function test_return_correct_login_url_if_user_is_object_using_default_keymanager() {
+    public function test_return_correct_login_url_if_user_is_object_using_default_keymanager(): void {
         global $DB, $CFG;
 
-        $user = array();
+        $user = [];
         $user['username'] = 'username';
         $user['email'] = 'exists@test.com';
 
@@ -548,16 +548,16 @@ class auth_plugin_test extends advanced_testcase {
         create_user_key('auth/userkey', $user->id);
         create_user_key('auth/userkey', $user->id);
         create_user_key('auth/userkey', $user->id);
-        $keys = $DB->get_records('user_private_key', array('userid' => $user->id));
+        $keys = $DB->get_records('user_private_key', ['userid' => $user->id]);
 
         $this->assertEquals(3, count($keys));
 
         $actual = $this->auth->get_login_url($user);
 
-        $keys = $DB->get_records('user_private_key', array('userid' => $user->id));
+        $keys = $DB->get_records('user_private_key', ['userid' => $user->id]);
         $this->assertEquals(1, count($keys));
 
-        $actualkey = $DB->get_record('user_private_key', array('userid' => $user->id));
+        $actualkey = $DB->get_record('user_private_key', ['userid' => $user->id]);
 
         $expected = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
 
@@ -567,12 +567,12 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that we can return correct allowed mapping fields.
      */
-    public function test_get_allowed_mapping_fields_list() {
-        $expected = array(
+    public function test_get_allowed_mapping_fields_list(): void {
+        $expected = [
             'username' => 'Username',
             'email' => 'Email address',
             'idnumber' => 'ID number',
-        );
+        ];
 
         $actual = $this->auth->get_allowed_mapping_fields();
 
@@ -582,14 +582,14 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that we can get correct request parameters based on the plugin configuration.
      */
-    public function test_get_request_login_url_user_parameters_based_on_plugin_config() {
+    public function test_get_request_login_url_user_parameters_based_on_plugin_config(): void {
         // Check email as it should be set by default.
-        $expected = array(
+        $expected = [
             'email' => new external_value(
                 PARAM_EMAIL,
                 'A valid email address'
             ),
-        );
+        ];
 
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
@@ -598,12 +598,12 @@ class auth_plugin_test extends advanced_testcase {
         set_config('mappingfield', 'username', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
 
-        $expected = array(
+        $expected = [
             'username' => new external_value(
                 PARAM_USERNAME,
                 'Username'
             ),
-        );
+        ];
 
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
@@ -612,12 +612,12 @@ class auth_plugin_test extends advanced_testcase {
         set_config('mappingfield', 'idnumber', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
 
-        $expected = array(
+        $expected = [
             'idnumber' => new external_value(
                 PARAM_RAW,
                 'An arbitrary ID code number perhaps from the institution'
             ),
-        );
+        ];
 
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
@@ -626,7 +626,7 @@ class auth_plugin_test extends advanced_testcase {
         set_config('mappingfield', 'junkfield', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
 
-        $expected = array();
+        $expected = [];
 
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
@@ -634,32 +634,32 @@ class auth_plugin_test extends advanced_testcase {
         // Check IP if iprestriction disabled.
         set_config('iprestriction', false, 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
-        $expected = array();
+        $expected = [];
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
 
         // Check IP if iprestriction enabled.
         set_config('iprestriction', true, 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
-        $expected = array(
+        $expected = [
             'ip' => new external_value(
                 PARAM_HOST,
                 'User IP address'
             ),
-        );
+        ];
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
 
         // Check IP if createuser enabled.
         set_config('createuser', true, 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
-        $expected = array(
+        $expected = [
             'ip' => new external_value(PARAM_HOST, 'User IP address'),
             'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user', VALUE_OPTIONAL),
             'lastname'  => new external_value(PARAM_NOTAGS, 'The family name of the user', VALUE_OPTIONAL),
             'email'     => new external_value(PARAM_RAW_TRIMMED, 'A valid and unique email address', VALUE_OPTIONAL),
             'username'  => new external_value(PARAM_USERNAME, 'A valid and unique username', VALUE_OPTIONAL),
-        );
+        ];
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
         set_config('createuser', false, 'auth_userkey');
@@ -667,13 +667,13 @@ class auth_plugin_test extends advanced_testcase {
         // Check IP if updateuser enabled.
         set_config('updateuser', true, 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
-        $expected = array(
+        $expected = [
             'ip' => new external_value(PARAM_HOST, 'User IP address'),
             'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user', VALUE_OPTIONAL),
             'lastname'  => new external_value(PARAM_NOTAGS, 'The family name of the user', VALUE_OPTIONAL),
             'email'     => new external_value(PARAM_RAW_TRIMMED, 'A valid and unique email address', VALUE_OPTIONAL),
             'username'  => new external_value(PARAM_USERNAME, 'A valid and unique username', VALUE_OPTIONAL),
-        );
+        ];
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
         set_config('updateuser', false, 'auth_userkey');
@@ -685,24 +685,24 @@ class auth_plugin_test extends advanced_testcase {
      * @return array First element URL, the second URL is error message. Empty error massage means no errors.
      */
     public function url_data_provider() {
-        return array(
-            array('', ''),
-            array('http://google.com/', ''),
-            array('https://google.com', ''),
-            array('http://some.very.long.and.silly.domain/with/a/path/', ''),
-            array('http://0.255.1.1/numericip.php', ''),
-            array('http://0.255.1.1/numericip.php?test=1&id=2', ''),
-            array('/just/a/path', 'You should provide valid URL'),
-            array('random string', 'You should provide valid URL'),
-            array(123456, 'You should provide valid URL'),
-            array('php://google.com', 'You should provide valid URL'),
-        );
+        return [
+            ['', ''],
+            ['http://google.com/', ''],
+            ['https://google.com', ''],
+            ['http://some.very.long.and.silly.domain/with/a/path/', ''],
+            ['http://0.255.1.1/numericip.php', ''],
+            ['http://0.255.1.1/numericip.php?test=1&id=2', ''],
+            ['/just/a/path', 'You should provide valid URL'],
+            ['random string', 'You should provide valid URL'],
+            [123456, 'You should provide valid URL'],
+            ['php://google.com', 'You should provide valid URL'],
+        ];
     }
 
     /**
      * Test required parameter exception gets thrown id try to login, but key is not set.
      */
-    public function test_required_parameter_exception_thrown_if_key_not_set() {
+    public function test_required_parameter_exception_thrown_if_key_not_set(): void {
         $this->expectException(moodle_exception::class);
         $this->expectExceptionMessage('A required parameter (key) was missing');
 
@@ -712,7 +712,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that incorrect key exception gets thrown if a key is incorrect.
      */
-    public function test_invalid_key_exception_thrown_if_invalid_key() {
+    public function test_invalid_key_exception_thrown_if_invalid_key(): void {
         $this->expectException(moodle_exception::class);
         $this->expectExceptionMessage('Incorrect key');
 
@@ -723,7 +723,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that expired key exception gets thrown if a key is expired.
      */
-    public function test_expired_key_exception_thrown_if_expired_key() {
+    public function test_expired_key_exception_thrown_if_expired_key(): void {
         $this->create_user_private_key(['validuntil' => time() - 3000]);
 
         $this->expectException(moodle_exception::class);
@@ -736,7 +736,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that IP address mismatch exception gets thrown if incorrect IP.
      */
-    public function test_ipmismatch_exception_thrown_if_ip_is_incorrect() {
+    public function test_ipmismatch_exception_thrown_if_ip_is_incorrect(): void {
         $this->create_user_private_key(['iprestriction' => '192.168.1.1']);
 
         $_POST['key'] = 'TestKey';
@@ -751,7 +751,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that IP address mismatch exception gets thrown if incorrect IP and outside whitelist.
      */
-    public function test_ipmismatch_exception_thrown_if_ip_is_outside_whitelist() {
+    public function test_ipmismatch_exception_thrown_if_ip_is_outside_whitelist(): void {
         set_config('ipwhitelist', '10.0.0.0/8;172.16.0.0/12;192.168.0.0/16', 'auth_userkey');
         $this->create_user_private_key(['iprestriction' => '192.161.1.1']);
 
@@ -767,7 +767,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that IP address mismatch exception gets thrown if user id is incorrect.
      */
-    public function test_invalid_user_exception_thrown_if_user_is_invalid() {
+    public function test_invalid_user_exception_thrown_if_user_is_invalid(): void {
         $this->create_user_private_key([
             'userid' => 777,
             'instance' => 777,
@@ -786,7 +786,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that key gets removed after a user logged in.
      */
-    public function test_that_key_gets_removed_after_user_logged_in() {
+    public function test_that_key_gets_removed_after_user_logged_in(): void {
         global $DB;
 
         $this->create_user_private_key([
@@ -801,7 +801,7 @@ class auth_plugin_test extends advanced_testcase {
             // Using @ is the only way to test this. Thanks moodle!
             @$this->auth->user_login_userkey();
         } catch (moodle_exception $e) {
-            $keyexists = $DB->record_exists('user_private_key', array('value' => 'RemoveKey'));
+            $keyexists = $DB->record_exists('user_private_key', ['value' => 'RemoveKey']);
             $this->assertFalse($keyexists);
         }
     }
@@ -809,7 +809,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that a user logs in and gets redirected correctly.
      */
-    public function test_that_user_logged_in_and_redirected() {
+    public function test_that_user_logged_in_and_redirected(): void {
         global $CFG;
 
         $this->create_user_private_key();
@@ -825,7 +825,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that a user logs in correctly.
      */
-    public function test_that_user_logged_in_correctly() {
+    public function test_that_user_logged_in_correctly(): void {
         global $USER, $SESSION;
 
         $this->create_user_private_key();
@@ -845,7 +845,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that a user gets redirected to internal wantsurl URL successful log in.
      */
-    public function test_that_user_gets_redirected_to_internal_wantsurl() {
+    public function test_that_user_gets_redirected_to_internal_wantsurl(): void {
         $this->create_user_private_key();
         $_POST['key'] = 'TestKey';
         $_POST['wantsurl'] = '/course/index.php?id=12&key=134';
@@ -860,7 +860,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that a user gets redirected to external wantsurl URL successful log in.
      */
-    public function test_that_user_gets_redirected_to_external_wantsurl() {
+    public function test_that_user_gets_redirected_to_external_wantsurl(): void {
         $this->create_user_private_key();
 
         $_POST['key'] = 'TestKey';
@@ -876,7 +876,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that login hook redirects a user if skipsso not set and ssourl is set.
      */
-    public function test_loginpage_hook_redirects_if_skipsso_not_set_and_ssourl_set() {
+    public function test_loginpage_hook_redirects_if_skipsso_not_set_and_ssourl_set(): void {
         global $SESSION;
 
         $SESSION->enrolkey_skipsso = 0;
@@ -892,7 +892,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that login hook does not redirect a user if skipsso not set and ssourl is not set.
      */
-    public function test_loginpage_hook_does_not_redirect_if_skipsso_not_set_and_ssourl_not_set() {
+    public function test_loginpage_hook_does_not_redirect_if_skipsso_not_set_and_ssourl_not_set(): void {
         global $SESSION;
 
         $SESSION->enrolkey_skipsso = 0;
@@ -905,7 +905,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that login hook does not redirect a user if skipsso is set and ssourl is not set.
      */
-    public function test_loginpage_hook_does_not_redirect_if_skipsso_set_and_ssourl_not_set() {
+    public function test_loginpage_hook_does_not_redirect_if_skipsso_set_and_ssourl_not_set(): void {
         global $SESSION;
 
         $SESSION->enrolkey_skipsso = 1;
@@ -918,7 +918,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that pre login hook redirects a user if skipsso not set and ssourl is set.
      */
-    public function test_pre_loginpage_hook_redirects_if_skipsso_not_set_and_ssourl_set() {
+    public function test_pre_loginpage_hook_redirects_if_skipsso_not_set_and_ssourl_set(): void {
         global $SESSION;
 
         $SESSION->enrolkey_skipsso = 0;
@@ -934,7 +934,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that pre login hook does not redirect a user if skipsso is not set and ssourl is not set.
      */
-    public function test_pre_loginpage_hook_does_not_redirect_if_skipsso_not_set_and_ssourl_not_set() {
+    public function test_pre_loginpage_hook_does_not_redirect_if_skipsso_not_set_and_ssourl_not_set(): void {
         global $SESSION;
 
         $SESSION->enrolkey_skipsso = 0;
@@ -947,7 +947,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that login page hook does not redirect a user if skipsso is set and ssourl is not set.
      */
-    public function test_pre_loginpage_hook_does_not_redirect_if_skipsso_set_and_ssourl_not_set() {
+    public function test_pre_loginpage_hook_does_not_redirect_if_skipsso_set_and_ssourl_not_set(): void {
         global $SESSION;
 
         $SESSION->enrolkey_skipsso = 1;
@@ -960,7 +960,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that if one user logged, he will be logged out before a new one is authorised.
      */
-    public function test_that_different_authorised_user_is_logged_out_and_new_one_logged_in() {
+    public function test_that_different_authorised_user_is_logged_out_and_new_one_logged_in(): void {
         global $USER, $SESSION;
 
         $user = $this->getDataGenerator()->create_user();
@@ -984,7 +984,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test that authorised user gets logged out when trying to logged in with invalid key.
      */
-    public function test_if_invalid_key_authorised_user_gets_logged_out() {
+    public function test_if_invalid_key_authorised_user_gets_logged_out(): void {
         global $USER, $SESSION;
 
         $user = $this->getDataGenerator()->create_user();
@@ -1008,7 +1008,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test if a user is logged in and tries to log in again it stays logged in.
      */
-    public function test_that_already_logged_in_user_stays_logged_in() {
+    public function test_that_already_logged_in_user_stays_logged_in(): void {
         global $DB, $USER, $SESSION;
 
         $this->setUser($this->user);
@@ -1025,7 +1025,7 @@ class auth_plugin_test extends advanced_testcase {
             $this->assertEquals($this->user->id, $USER->id);
             $this->assertSame(sesskey(), $USER->sesskey);
             $this->assertObjectNotHasProperty('userkey', $SESSION);
-            $keyexists = $DB->record_exists('user_private_key', array('value' => 'TestKey'));
+            $keyexists = $DB->record_exists('user_private_key', ['value' => 'TestKey']);
             $this->assertFalse($keyexists);
         }
     }
@@ -1033,7 +1033,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test when try to logout, but required return is not set.
      */
-    public function test_user_logout_userkey_when_required_return_not_set() {
+    public function test_user_logout_userkey_when_required_return_not_set(): void {
         $this->expectException(moodle_exception::class);
         $this->expectExceptionMessage('A required parameter (return) was missing');
 
@@ -1043,7 +1043,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test when try to logout, but user is not logged in.
      */
-    public function test_user_logout_userkey_when_user_is_not_logged_in() {
+    public function test_user_logout_userkey_when_user_is_not_logged_in(): void {
         $_POST['return'] = self::REDIRECTION_PATH;
 
         $this->expectException(moodle_exception::class);
@@ -1057,7 +1057,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test when try to logout, but user logged in with different auth type.
      */
-    public function test_user_logout_userkey_when_user_logged_in_with_different_auth() {
+    public function test_user_logout_userkey_when_user_logged_in_with_different_auth(): void {
         global $USER;
 
         $_POST['return'] = self::REDIRECTION_PATH;
@@ -1078,7 +1078,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test when try to logout, but user logged in with different auth type.
      */
-    public function test_user_logout_userkey_when_user_logged_in_but_return_not_set() {
+    public function test_user_logout_userkey_when_user_logged_in_but_return_not_set(): void {
         $this->setUser($this->user);
 
         $this->expectException(moodle_exception::class);
@@ -1090,7 +1090,7 @@ class auth_plugin_test extends advanced_testcase {
     /**
      * Test successful logout.
      */
-    public function test_user_logout_userkey_logging_out() {
+    public function test_user_logout_userkey_logging_out(): void {
         global $USER;
 
         $this->setUser($this->user);

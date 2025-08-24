@@ -28,14 +28,13 @@ use auth_userkey\core_userkey_manager;
 use auth_userkey\userkey_manager_interface;
 use core_external\external_value;
 
-require_once($CFG->libdir.'/authlib.php');
+require_once($CFG->libdir . '/authlib.php');
 require_once($CFG->dirroot . '/user/lib.php');
 
 /**
  * User key authentication plugin.
  */
 class auth_plugin_userkey extends auth_plugin_base {
-
     /**
      * Default mapping field.
      */
@@ -53,7 +52,7 @@ class auth_plugin_userkey extends auth_plugin_base {
      *
      * @var array
      */
-    protected $defaults = array(
+    protected $defaults = [
         'mappingfield' => self::DEFAULT_MAPPING_FIELD,
         'keylifetime' => 60,
         'iprestriction' => 0,
@@ -62,7 +61,7 @@ class auth_plugin_userkey extends auth_plugin_base {
         'ssourl' => '',
         'createuser' => false,
         'updateuser' => false,
-    );
+    ];
 
     /**
      * Constructor.
@@ -297,14 +296,16 @@ class auth_plugin_userkey extends auth_plugin_base {
             throw new invalid_parameter_exception('Unable to create user, missing value(s): ' . implode(',', $missingfields));
         }
 
-        if ($DB->record_exists('user', array('username' => $user['username'], 'mnethostid' => $CFG->mnet_localhost_id))) {
-            throw new invalid_parameter_exception('Username already exists: '.$user['username']);
+        if ($DB->record_exists('user', ['username' => $user['username'], 'mnethostid' => $CFG->mnet_localhost_id])) {
+            throw new invalid_parameter_exception('Username already exists: ' . $user['username']);
         }
         if (!validate_email($user['email'])) {
-            throw new invalid_parameter_exception('Email address is invalid: '.$user['email']);
-        } else if (empty($CFG->allowaccountssameemail) &&
-            $DB->record_exists('user', array('email' => $user['email'], 'mnethostid' => $user['mnethostid']))) {
-            throw new invalid_parameter_exception('Email address already exists: '.$user['email']);
+            throw new invalid_parameter_exception('Email address is invalid: ' . $user['email']);
+        } else if (
+            empty($CFG->allowaccountssameemail) &&
+            $DB->record_exists('user', ['email' => $user['email'], 'mnethostid' => $user['mnethostid']])
+        ) {
+            throw new invalid_parameter_exception('Email address already exists: ' . $user['email']);
         }
 
         $userid = user_create_user($user);
@@ -341,20 +342,20 @@ class auth_plugin_userkey extends auth_plugin_base {
         if (
             $user->username != $userdata['username']
             &&
-            $DB->record_exists('user', array('username' => $userdata['username'], 'mnethostid' => $CFG->mnet_localhost_id))
+            $DB->record_exists('user', ['username' => $userdata['username'], 'mnethostid' => $CFG->mnet_localhost_id])
         ) {
-            throw new invalid_parameter_exception('Username already exists: '.$userdata['username']);
+            throw new invalid_parameter_exception('Username already exists: ' . $userdata['username']);
         }
         if (!validate_email($userdata['email'])) {
-            throw new invalid_parameter_exception('Email address is invalid: '.$userdata['email']);
+            throw new invalid_parameter_exception('Email address is invalid: ' . $userdata['email']);
         } else if (
             empty($CFG->allowaccountssameemail)
             &&
             $user->email != $userdata['email']
             &&
-            $DB->record_exists('user', array('email' => $userdata['email'], 'mnethostid' => $CFG->mnet_localhost_id))
+            $DB->record_exists('user', ['email' => $userdata['email'], 'mnethostid' => $CFG->mnet_localhost_id])
         ) {
-            throw new invalid_parameter_exception('Email address already exists: '.$userdata['email']);
+            throw new invalid_parameter_exception('Email address already exists: ' . $userdata['email']);
         }
         $userdata['id'] = $user->id;
 
@@ -402,10 +403,10 @@ class auth_plugin_userkey extends auth_plugin_base {
 
         $mappingfield = $this->get_mapping_field();
 
-        $params = array(
+        $params = [
             $mappingfield => $data[$mappingfield],
             'mnethostid' => $CFG->mnet_localhost_id,
-        );
+        ];
 
         $user = $DB->get_record('user', $params);
 
@@ -476,11 +477,11 @@ class auth_plugin_userkey extends auth_plugin_base {
      * @return array
      */
     public function get_allowed_mapping_fields() {
-        return array(
+        return [
             'username' => get_string('username'),
             'email' => get_string('email'),
             'idnumber' => get_string('idnumber'),
-        );
+        ];
     }
 
     /**
@@ -493,34 +494,34 @@ class auth_plugin_userkey extends auth_plugin_base {
 
         switch ($mappingfield) {
             case 'username':
-                $parameter = array(
+                $parameter = [
                     'username' => new external_value(
                         PARAM_USERNAME,
                         'Username'
                     ),
-                );
+                ];
                 break;
 
             case 'email':
-                $parameter = array(
+                $parameter = [
                     'email' => new external_value(
                         PARAM_EMAIL,
                         'A valid email address'
                     ),
-                );
+                ];
                 break;
 
             case 'idnumber':
-                $parameter = array(
+                $parameter = [
                     'idnumber' => new external_value(
                         PARAM_RAW,
                         'An arbitrary ID code number perhaps from the institution'
                     ),
-                );
+                ];
                 break;
 
             default:
-                $parameter = array();
+                $parameter = [];
                 break;
         }
 
@@ -533,7 +534,7 @@ class auth_plugin_userkey extends auth_plugin_base {
      * @return array
      */
     protected function get_user_fields_parameters() {
-        $parameters = array();
+        $parameters = [];
 
         if ($this->is_ip_restriction_enabled()) {
             $parameters['ip'] = new external_value(
@@ -594,7 +595,6 @@ class auth_plugin_userkey extends auth_plugin_base {
         if (isset($this->config->ssourl) && $this->config->ssourl != '' && !$skipsso) {
             return true;
         }
-
     }
 
     /**

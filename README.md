@@ -9,6 +9,12 @@ application. The main idea is to make a web call to moodle and provide one of th
 fields to find required user and generate one time login URL. A user can be redirected to this
 URL to be log in to Moodle without typing username and password.
 
+# Versions and branches
+
+| Moodle Version   | Branch            | 
+|------------------|-------------------|
+| Moodle 3.3 - 4.1 | MOODLE_33PLUS     | 
+| Moodle 4.5+      | MOODLE_405_STABLE | 
 
 Using
 -----
