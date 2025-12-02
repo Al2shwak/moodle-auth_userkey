@@ -232,6 +232,20 @@ final class auth_plugin_test extends advanced_testcase {
     }
 
     /**
+     * Test that auth plugin throws correct exception if id mapping field is not provided, but set in configs.
+     */
+    public function test_throwing_exception_if_mapping_field_id_is_not_provided(): void {
+        $user = [];
+        set_config('mappingfield', 'id', 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        $this->expectException(invalid_parameter_exception::class);
+        $this->expectExceptionMessage('Invalid parameter value detected (Required field "id" is not set or empty.)');
+
+        $actual = $this->auth->get_login_url($user);
+    }
+
+    /**
      * Test that auth plugin throws correct exception if we trying to request not existing user.
      */
     public function test_throwing_exception_if_user_is_not_exist(): void {
@@ -572,6 +586,7 @@ final class auth_plugin_test extends advanced_testcase {
             'username' => 'Username',
             'email' => 'Email address',
             'idnumber' => 'ID number',
+            'id' => 'User ID',
         ];
 
         $actual = $this->auth->get_allowed_mapping_fields();
@@ -616,6 +631,20 @@ final class auth_plugin_test extends advanced_testcase {
             'idnumber' => new external_value(
                 PARAM_RAW,
                 'An arbitrary ID code number perhaps from the institution'
+            ),
+        ];
+
+        $actual = $this->auth->get_request_login_url_user_parameters();
+        $this->assertEquals($expected, $actual);
+
+        // Check idnumber.
+        set_config('mappingfield', 'id', 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        $expected = [
+            'id' => new external_value(
+                PARAM_INT,
+                'Database ID of the user'
             ),
         ];
 
