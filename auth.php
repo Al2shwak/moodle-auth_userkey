@@ -481,6 +481,7 @@ class auth_plugin_userkey extends auth_plugin_base {
             'username' => get_string('username'),
             'email' => get_string('email'),
             'idnumber' => get_string('idnumber'),
+            'id' => get_string('userid', 'auth_userkey'),
         ];
     }
 
@@ -519,6 +520,15 @@ class auth_plugin_userkey extends auth_plugin_base {
                     ),
                 ];
                 break;
+            case 'id':
+                $parameter = [
+                    'id' => new external_value(
+                        PARAM_INT,
+                        'Database ID of the user'
+                    ),
+                ];
+                break;
+
 
             default:
                 $parameter = [];

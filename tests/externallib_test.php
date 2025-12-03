@@ -138,6 +138,23 @@ final class externallib_test extends advanced_testcase {
         $this->assertTrue(key_exists('loginurl', $result));
         $this->assertEquals($expectedurl, $result['loginurl']);
 
+        // Database Id.
+        set_config('mappingfield', 'id', 'auth_userkey');
+        $params = [
+            'id' => $this->user->id,
+        ];
+
+        // Simulate the web service server.
+        $result = auth_userkey_external::request_login_url($params);
+        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+
+        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
+        $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
+
+        $this->assertTrue(is_array($result));
+        $this->assertTrue(key_exists('loginurl', $result));
+        $this->assertEquals($expectedurl, $result['loginurl']);
+
         // IP restriction.
         set_config('iprestriction', true, 'auth_userkey');
         set_config('mappingfield', 'idnumber', 'auth_userkey');

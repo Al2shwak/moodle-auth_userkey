@@ -12,9 +12,9 @@ URL to be log in to Moodle without typing username and password.
 
 # Versions and branches
 
-| Moodle Version   | Branch            | 
+| Moodle Version   | Branch            |
 |------------------|-------------------|
-| Moodle 4.5+      | MOODLE_405_STABLE | 
+| Moodle 4.5+      | MOODLE_405_STABLE |
 | Moodle 3.3 - 4.1 | MOODLE_33PLUS     |
 
 Using
@@ -64,6 +64,14 @@ For example XML-RPC (PHP structure) description for different mapping field sett
             [idnumber] => string
             )
 
+***Database Id***
+
+    [user] =>
+        Array
+            (
+            [id] => int
+            )
+
 ***Web service will return following structure or standard Moodle webservice error message.***
 
     Array
@@ -104,21 +112,21 @@ E.g. http://yourmoodle.com/login/index.php?enrolkey_skipsso=1
 
 **Logout URL**
 
-If you need to logout users after they logged out from the external application, you can redirect them 
-to logout script with required parameter "return". 
+If you need to logout users after they logged out from the external application, you can redirect them
+to logout script with required parameter "return".
 
-E.g. http://yourmoodle.com/auth/userkey/logout.php?return=www.google.com 
+E.g. http://yourmoodle.com/auth/userkey/logout.php?return=www.google.com
 
 
-Users will be logged out from Moodle and then redirected to the provided URL. 
-In case when a user session is already expired, the user will be still redirected.  
-  
+Users will be logged out from Moodle and then redirected to the provided URL.
+In case when a user session is already expired, the user will be still redirected.
+
 
 **Example client**
 
 **Note:** the code below is not for production use. It's just a quick and dirty way to test the functionality.
 
-The code below defines a function that can be used to obtain a login url. 
+The code below defines a function that can be used to obtain a login url.
 You will need to add/remove parameters depending on whether you have update/create user enabled and which mapping field you are using.
 
 The required library curl can be obtained from https://github.com/moodlehq/sample-ws-clients
@@ -136,7 +144,7 @@ The required library curl can be obtained from https://github.com/moodlehq/sampl
  */
 function getloginurl($useremail, $firstname, $lastname, $username, $courseid = null, $modname = null, $activityid = null) {
     require_once('curl.php');
-        
+
     $token        = 'YOUR_TOKEN';
     $domainname   = 'http://MOODLE_WWW_ROOT';
     $functionname = 'auth_userkey_request_login_url';
@@ -145,19 +153,19 @@ function getloginurl($useremail, $firstname, $lastname, $username, $courseid = n
         'user' => [
             'firstname' => $firstname, // You will not need this parameter, if you are not creating/updating users
             'lastname'  => $lastname, // You will not need this parameter, if you are not creating/updating users
-            'username'  => $username, 
+            'username'  => $username,
             'email'     => $useremail,
         ]
     ];
 
     $serverurl = $domainname . '/webservice/rest/server.php' . '?wstoken=' . $token . '&wsfunction=' . $functionname . '&moodlewsrestformat=json';
-    $curl = new curl; // The required library curl can be obtained from https://github.com/moodlehq/sample-ws-clients 
+    $curl = new curl; // The required library curl can be obtained from https://github.com/moodlehq/sample-ws-clients
 
     try {
         $resp     = $curl->post($serverurl, $param);
         $resp     = json_decode($resp);
         if ($resp && !empty($resp->loginurl)) {
-            $loginurl = $resp->loginurl;        
+            $loginurl = $resp->loginurl;
         }
     } catch (Exception $ex) {
         return false;
@@ -192,7 +200,7 @@ https://www.catalyst-au.net/
 
 # Contributing and Support
 
-Issues, and pull requests using github are welcome and encouraged! 
+Issues, and pull requests using github are welcome and encouraged!
 
 https://github.com/catalyst/moodle-auth_userkey/issues
 
