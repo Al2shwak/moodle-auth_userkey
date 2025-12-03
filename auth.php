@@ -481,7 +481,7 @@ class auth_plugin_userkey extends auth_plugin_base {
             'username' => get_string('username'),
             'email' => get_string('email'),
             'idnumber' => get_string('idnumber'),
-            'id' => get_string('userid', 'grades'),
+            'id' => get_string('userid', 'auth_userkey'),
         ];
     }
 

@@ -52,4 +52,5 @@ $string['ssourl'] = 'URL of SSO host';
 $string['ssourl_desc'] = 'URL of the SSO host to redirect users to. If defined users will be redirected here on login instead of the Moodle Login page';
 $string['updateuser'] = 'Update user?';
 $string['updateuser_desc'] = 'If enabled, users will be updated with the properties supplied when the webservice is called.';
+$string['userid'] = 'User ID';
 $string['userkey:generatekey'] = 'Generate login user key';

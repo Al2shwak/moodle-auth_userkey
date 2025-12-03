@@ -637,7 +637,7 @@ final class auth_plugin_test extends advanced_testcase {
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
 
-        // Check idnumber.
+        // Check user id.
         set_config('mappingfield', 'id', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
 
