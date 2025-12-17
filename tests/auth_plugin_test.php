@@ -896,7 +896,9 @@ final class auth_plugin_test extends advanced_testcase {
         $_POST['wantsurl'] = 'http://test.com/course/index.php?id=12&key=134';
 
         $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Unsupported redirect to http://test.com/course/index.php?id=12&key=134 detected, execution terminated');
+        $this->expectExceptionMessage(
+            'Unsupported redirect to http://test.com/course/index.php?id=12&key=134 detected, execution terminated'
+        );
 
         // Using @ is the only way to test this. Thanks moodle!
         @$this->auth->user_login_userkey();

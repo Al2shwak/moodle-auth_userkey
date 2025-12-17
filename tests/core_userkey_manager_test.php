@@ -64,8 +64,12 @@ final class core_userkey_manager_test extends \advanced_testcase {
      * @return void
      * @throws \dml_exception
      */
-    private function validate_iprestriction(string $allowips = '', string $script = 'auth/userkey', ?string $iprestriction = null,
-                                            int $keylifetime = 60): void {
+    private function validate_iprestriction(
+        string $allowips = '',
+        string $script = 'auth/userkey',
+        ?string $iprestriction = null,
+        int $keylifetime = 60
+    ): void {
         global $DB;
         $manager = new core_userkey_manager($this->config);
         if ($allowips) {
