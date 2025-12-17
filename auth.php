@@ -529,7 +529,6 @@ class auth_plugin_userkey extends auth_plugin_base {
                 ];
                 break;
 
-
             default:
                 $parameter = [];
                 break;
