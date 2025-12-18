@@ -16,6 +16,9 @@
 
 namespace auth_userkey;
 
+use core\di;
+use core\clock;
+
 /**
  * Key manager class.
  *
@@ -62,9 +65,9 @@ class core_userkey_manager implements userkey_manager_interface {
         $this->delete_keys($userid);
 
         if (isset($this->config->keylifetime) && (int)$this->config->keylifetime > 0) {
-            $validuntil = time() + $this->config->keylifetime;
+            $validuntil = di::get(clock::class)->time() + $this->config->keylifetime;
         } else {
-            $validuntil = time() + self::DEFAULT_KEY_LIFE_TIME_IN_SECONDS;
+            $validuntil = di::get(clock::class)->time() + self::DEFAULT_KEY_LIFE_TIME_IN_SECONDS;
         }
 
         $iprestriction = null;
@@ -116,7 +119,7 @@ class core_userkey_manager implements userkey_manager_interface {
             throw new \moodle_exception('invalidkey');
         }
 
-        if (!empty($key->validuntil) && $key->validuntil < time()) {
+        if (!empty($key->validuntil) && $key->validuntil < di::get(clock::class)->time()) {
             throw new \moodle_exception('expiredkey');
         }
 
