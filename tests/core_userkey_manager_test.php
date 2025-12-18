@@ -71,6 +71,7 @@ final class core_userkey_manager_test extends \advanced_testcase {
         int $keylifetime = 60
     ): void {
         global $DB;
+        $clock = $this->mock_clock_with_frozen();
         $manager = new core_userkey_manager($this->config);
         if ($allowips) {
             $value = $manager->create_key($this->user->id, $allowips);
@@ -83,7 +84,7 @@ final class core_userkey_manager_test extends \advanced_testcase {
         $this->assertEquals($script, $actualkey->script);
         $this->assertEquals($this->user->id, $actualkey->instance);
         $this->assertEquals($iprestriction, $actualkey->iprestriction);
-        $this->assertEquals(time() + $keylifetime, $actualkey->validuntil);
+        $this->assertEquals($clock->time() + $keylifetime, $actualkey->validuntil);
     }
     /**
      * Test that core_userkey_manager implements userkey_manager_interface interface.
