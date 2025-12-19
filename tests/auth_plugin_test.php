@@ -548,6 +548,41 @@ final class auth_plugin_test extends advanced_testcase {
     }
 
     /**
+     * Test that a user can be updated without providing any other fields than the mappingfield.
+     * (Only auth field should be updated).
+     */
+    public function test_update_allow_unset_fields(): void {
+        global $DB;
+        set_config('updateuser', true, 'auth_userkey');
+        set_config('mappingfield', 'id', 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        $userkeymanager = new fake_userkey_manager();
+        $this->auth->set_userkey_manager($userkeymanager);
+
+        $originaluser = new stdClass();
+        $originaluser->username = 'username';
+        $originaluser->email = 'username@test.com';
+        $originaluser->firstname = 'user';
+        $originaluser->lastname = 'name';
+
+        $user = self::getDataGenerator()->create_user($originaluser);
+
+        $loginuser = new stdClass();
+        $loginuser->id = $user->id;
+
+        $key = $this->auth->get_login_url($loginuser);
+
+        $userrecord = $DB->get_record('user', ['id' => $user->id]);
+        $this->assertNotEmpty($key);
+        $this->assertEquals('userkey', $userrecord->auth);
+        $this->assertEquals('username', $userrecord->username);
+        $this->assertEquals('username@test.com', $userrecord->email);
+        $this->assertEquals('user', $userrecord->firstname);
+        $this->assertEquals('name', $userrecord->lastname);
+    }
+
+    /**
      * Test that we can get login url if we do not use fake keymanager.
      */
     public function test_return_correct_login_url_if_user_is_object_using_default_keymanager(): void {
