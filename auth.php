@@ -340,18 +340,27 @@ class auth_plugin_userkey extends auth_plugin_base {
         }
 
         if (
+            isset($userdata['username'])
+            &&
             $user->username != $userdata['username']
             &&
             $DB->record_exists('user', ['username' => $userdata['username'], 'mnethostid' => $CFG->mnet_localhost_id])
         ) {
             throw new invalid_parameter_exception('Username already exists: ' . $userdata['username']);
         }
-        if (!validate_email($userdata['email'])) {
+
+        $emailchangerequested = isset($userdata['email']) && $user->email != $userdata['email'];
+
+        if (
+            $emailchangerequested
+            &&
+            !validate_email($userdata['email'])
+        ) {
             throw new invalid_parameter_exception('Email address is invalid: ' . $userdata['email']);
         } else if (
-            empty($CFG->allowaccountssameemail)
+            $emailchangerequested
             &&
-            $user->email != $userdata['email']
+            empty($CFG->allowaccountssameemail)
             &&
             $DB->record_exists('user', ['email' => $userdata['email'], 'mnethostid' => $CFG->mnet_localhost_id])
         ) {
