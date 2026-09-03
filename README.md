@@ -1,5 +1,5 @@
-<a href="https://github.com/catalyst/moodle-auth_userkey/actions?query=branch%3AMOODLE_405_STABLE">
-<img src="https://github.com/catalyst/moodle-auth_userkey/workflows/ci/badge.svg">
+<a href="https://github.com/Al2shwak/moodle-auth_userkey/actions/workflows/ci.yml?query=branch%3AMOODLE_502_STABLE">
+<img src="https://github.com/Al2shwak/moodle-auth_userkey/actions/workflows/ci.yml/badge.svg?branch=MOODLE_502_STABLE">
 </a>
 
 Log in to Moodle using one time user key.
@@ -14,22 +14,26 @@ URL to be log in to Moodle without typing username and password.
 
 | Moodle Version   | Branch            |
 |------------------|-------------------|
-| Moodle 4.5+      | MOODLE_405_STABLE |
+| Moodle 4.5 - 5.2 | MOODLE_502_STABLE |
 | Moodle 3.3 - 4.1 | MOODLE_33PLUS     |
 
 Using
 -----
 1. Install the plugin as usual.
 2. Enable the userkey authentication plugin (Site administration -> Plugins -> Authentication and then enable User key).
-3. Configure the plugin. Set required Mapping field, User key life time, IP restriction and Logout redirect URL.
-4. Enable and configure just installed plugin. Set required Mapping field, User key life time, IP restriction and Logout redirect URL.
-5. Enable web service advance feature (Admin > Advanced features), more info http://docs.moodle.org/en/Web_services
-6. Enable one of the supported protocols (Admin > Plugins > Web services > Manage protocols)
-7. Create a token for a specific user and for the service 'User key authentication web service' (Admin > Plugins > Web services > Manage tokens)
-8. Make sure that the "web service" user has 'auth/userkey:generatekey' capability.
-9. Authorise the "web service" user: Admin > Plugins > Web services > External services, select 'Authorised users' for the web service, and add the user.
-10. Configure your external application to make a web call to get login URL.
-11. Redirect your users to this URL to be logged in to Moodle.
+3. Configure the plugin. Set the mapping field, user key lifetime, IP restriction, and redirect settings.
+4. Enable the web services advanced feature (Site administration > General > Advanced features). See [Web services](https://docs.moodle.org/en/Web_services).
+5. Enable one of the supported protocols (Site administration > Server > Web services > Manage protocols).
+6. Create a token for a specific user and for the service 'User key authentication web service' (Site administration > Server > Web services > Manage tokens).
+7. Make sure that the web service user has the `auth/userkey:generatekey` capability.
+8. Authorise the web service user (Site administration > Server > Web services > External services > Authorised users).
+9. Configure your external application to request a login URL.
+10. Redirect the user to the returned URL.
+
+The `auth/userkey:generatekey` capability permits impersonating any eligible Moodle user, including
+privileged non-administrator accounts. Site administrators are excluded from key-based login and must use
+another configured Moodle authentication method. Grant this capability only to a dedicated, tightly controlled
+web-service account and protect its token as a privileged credential.
 
 Configuration
 -------------
@@ -86,7 +90,25 @@ You can amend login URL by "wantsurl" parameter to redirect user after they logg
 
 E.g. http://yourmoodle.com/auth/userkey/login.php?key=uniquekey&wantsurl=http://yourmoodle.com/course/view.php?id=3
 
-Wantsurl maybe internal and external.
+The `wantsurl` parameter may point to a local Moodle URL. External HTTP(S) URLs are accepted only when their host is explicitly listed in the **Allowed redirect hosts** setting. Multiple hosts may be separated by semicolons, commas, or new lines. Enter host names without a protocol or path, for example `portal.example.com;app.example.org`.
+
+An invalid or unapproved destination falls back to the Moodle site URL.
+
+**Update existing users**
+
+When enabled, profile fields supplied by the external service are applied to an existing user and that user's
+authentication method is changed to **User key authentication**. This can be used as part of an intentional
+account migration. Site administrators are excluded from this process and continue to use their existing Moodle
+authentication method.
+
+**Cohorts for newly created users**
+
+When **Create user?** is enabled, the plugin can add each account it creates to one or more selected Moodle
+cohorts. This applies only at account creation; requesting a key for an existing user or updating an existing
+user does not change their cohort memberships. Deleted cohorts left in an older saved configuration are skipped.
+
+Adding a user to a cohort can also enrol that user into courses configured with Moodle's cohort sync enrolment
+method. Treat this setting as part of the access granted to accounts created through the SSO web service.
 
 
 **User key life time**
@@ -112,13 +134,14 @@ E.g. http://yourmoodle.com/login/index.php?enrolkey_skipsso=1
 
 **Logout URL**
 
-If you need to logout users after they logged out from the external application, you can redirect them
-to logout script with required parameter "return".
+To log out a userkey-authenticated session through the plugin endpoint, send the user to the logout script
+with the required local `return` URL and the current Moodle `sesskey` CSRF token.
 
-E.g. http://yourmoodle.com/auth/userkey/logout.php?return=www.google.com
+E.g. http://yourmoodle.com/auth/userkey/logout.php?return=/login/index.php&sesskey=users-session-key
 
 
-Users will be logged out from Moodle and then redirected to the provided URL.
+Users will be logged out from Moodle and then redirected to the provided local Moodle URL. A logged-in
+user is not logged out when the `sesskey` is missing or invalid.
 In case when a user session is already expired, the user will be still redirected.
 
 

@@ -22,6 +22,7 @@ use stdClass;
 use invalid_parameter_exception;
 use moodle_exception;
 use core_external\external_value;
+use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
  * Tests for auth_plugin_userkey class.
@@ -32,6 +33,7 @@ use core_external\external_value;
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+#[CoversClass(\auth_plugin_userkey::class)]
 final class auth_plugin_test extends advanced_testcase {
     /**
      * An instance of auth_plugin_userkey class.
@@ -87,7 +89,7 @@ final class auth_plugin_test extends advanced_testcase {
             $record->userid = $this->user->id;
         }
 
-        if (!isset($record->userid)) {
+        if (!isset($record->instance)) {
             $record->instance = $this->user->id;
         }
 
@@ -258,6 +260,46 @@ final class auth_plugin_test extends advanced_testcase {
     }
 
     /**
+     * Test that a key is not generated when a mapping value belongs to multiple users.
+     */
+    public function test_throwing_exception_if_multiple_users_match(): void {
+        global $CFG, $DB;
+
+        $CFG->allowaccountssameemail = true;
+        self::getDataGenerator()->create_user(['email' => 'shared@example.com']);
+        self::getDataGenerator()->create_user(['email' => 'shared@example.com']);
+
+        $this->expectException(invalid_parameter_exception::class);
+        $this->expectExceptionMessage(
+            'Invalid parameter value detected (Multiple users match the configured mapping field)'
+        );
+
+        try {
+            $this->auth->get_login_url(['email' => 'shared@example.com']);
+        } finally {
+            $this->assertFalse($DB->record_exists('user_private_key', ['script' => 'auth/userkey']));
+        }
+    }
+
+    /**
+     * Test that a key is not generated for a site administrator.
+     */
+    public function test_throwing_exception_if_user_is_site_administrator(): void {
+        global $CFG, $DB;
+
+        set_config('siteadmins', $CFG->siteadmins . ',' . $this->user->id);
+
+        $this->expectException(invalid_parameter_exception::class);
+        $this->expectExceptionMessage(get_string('siteadminnotallowed', 'auth_userkey'));
+
+        try {
+            $this->auth->get_login_url(['email' => $this->user->email]);
+        } finally {
+            $this->assertFalse($DB->record_exists('user_private_key', ['script' => 'auth/userkey']));
+        }
+    }
+
+    /**
      * Test that auth plugin throws correct exception if we trying to request user,
      * but ip field is not set and iprestriction is enabled.
      */
@@ -367,6 +409,98 @@ final class auth_plugin_test extends advanced_testcase {
         $this->assertEquals($user->lastname, $userrecord->lastname);
         $this->assertEquals(1, $userrecord->confirmed);
         $this->assertEquals('userkey', $userrecord->auth);
+    }
+
+    /**
+     * Test that a newly created user is added to every configured cohort.
+     */
+    public function test_new_user_is_added_to_configured_cohorts(): void {
+        global $DB;
+
+        $cohortone = self::getDataGenerator()->create_cohort(['name' => 'First cohort']);
+        $cohorttwo = self::getDataGenerator()->create_cohort(['name' => 'Second cohort']);
+        set_config('createuser', true, 'auth_userkey');
+        set_config('createusercohorts', $cohortone->id . ',' . $cohorttwo->id, 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        $userkeymanager = new fake_userkey_manager();
+        $this->auth->set_userkey_manager($userkeymanager);
+
+        $this->auth->get_login_url([
+            'username' => 'cohortuser',
+            'email' => 'cohortuser@example.com',
+            'firstname' => 'Cohort',
+            'lastname' => 'User',
+        ]);
+
+        $user = $DB->get_record('user', ['username' => 'cohortuser'], '*', MUST_EXIST);
+        $this->assertTrue($DB->record_exists('cohort_members', [
+            'cohortid' => $cohortone->id,
+            'userid' => $user->id,
+        ]));
+        $this->assertTrue($DB->record_exists('cohort_members', [
+            'cohortid' => $cohorttwo->id,
+            'userid' => $user->id,
+        ]));
+    }
+
+    /**
+     * Test that stale and malformed cohort settings do not prevent user creation.
+     */
+    public function test_new_user_ignores_invalid_configured_cohorts(): void {
+        global $DB;
+
+        $cohort = self::getDataGenerator()->create_cohort();
+        set_config('createuser', true, 'auth_userkey');
+        set_config('createusercohorts', 'invalid,0,999999,' . $cohort->id . ',' . $cohort->id, 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        $userkeymanager = new fake_userkey_manager();
+        $this->auth->set_userkey_manager($userkeymanager);
+
+        $this->auth->get_login_url([
+            'username' => 'validcohortuser',
+            'email' => 'validcohortuser@example.com',
+            'firstname' => 'Valid',
+            'lastname' => 'Cohort user',
+        ]);
+
+        $user = $DB->get_record('user', ['username' => 'validcohortuser'], '*', MUST_EXIST);
+        $this->assertEquals(1, $DB->count_records('cohort_members', ['userid' => $user->id]));
+        $this->assertTrue($DB->record_exists('cohort_members', [
+            'cohortid' => $cohort->id,
+            'userid' => $user->id,
+        ]));
+    }
+
+    /**
+     * Test that configured cohorts are not applied when an existing user is updated.
+     */
+    public function test_existing_user_is_not_added_to_configured_cohorts(): void {
+        global $DB;
+
+        $cohort = self::getDataGenerator()->create_cohort();
+        $user = self::getDataGenerator()->create_user([
+            'email' => 'existingcohortuser@example.com',
+            'firstname' => 'Existing',
+        ]);
+        set_config('createuser', true, 'auth_userkey');
+        set_config('updateuser', true, 'auth_userkey');
+        set_config('createusercohorts', (string) $cohort->id, 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        $userkeymanager = new fake_userkey_manager();
+        $this->auth->set_userkey_manager($userkeymanager);
+
+        $this->auth->get_login_url([
+            'email' => $user->email,
+            'firstname' => 'Updated',
+        ]);
+
+        $this->assertFalse($DB->record_exists('cohort_members', [
+            'cohortid' => $cohort->id,
+            'userid' => $user->id,
+        ]));
     }
 
     /**
@@ -707,7 +841,7 @@ final class auth_plugin_test extends advanced_testcase {
         $this->auth = new auth_plugin_userkey();
         $expected = [
             'ip' => new external_value(
-                PARAM_HOST,
+                PARAM_RAW_TRIMMED,
                 'User IP address'
             ),
         ];
@@ -718,7 +852,7 @@ final class auth_plugin_test extends advanced_testcase {
         set_config('createuser', true, 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
         $expected = [
-            'ip' => new external_value(PARAM_HOST, 'User IP address'),
+            'ip' => new external_value(PARAM_RAW_TRIMMED, 'User IP address'),
             'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user', VALUE_OPTIONAL),
             'lastname'  => new external_value(PARAM_NOTAGS, 'The family name of the user', VALUE_OPTIONAL),
             'email'     => new external_value(PARAM_RAW_TRIMMED, 'A valid and unique email address', VALUE_OPTIONAL),
@@ -732,7 +866,7 @@ final class auth_plugin_test extends advanced_testcase {
         set_config('updateuser', true, 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
         $expected = [
-            'ip' => new external_value(PARAM_HOST, 'User IP address'),
+            'ip' => new external_value(PARAM_RAW_TRIMMED, 'User IP address'),
             'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user', VALUE_OPTIONAL),
             'lastname'  => new external_value(PARAM_NOTAGS, 'The family name of the user', VALUE_OPTIONAL),
             'email'     => new external_value(PARAM_RAW_TRIMMED, 'A valid and unique email address', VALUE_OPTIONAL),
@@ -922,9 +1056,11 @@ final class auth_plugin_test extends advanced_testcase {
     }
 
     /**
-     * Test that a user gets redirected to external wantsurl URL successful log in.
+     * Test that an external wantsurl is blocked by default.
      */
-    public function test_that_user_gets_redirected_to_external_wantsurl(): void {
+    public function test_that_external_wantsurl_is_blocked_by_default(): void {
+        global $CFG;
+
         $this->create_user_private_key();
 
         $_POST['key'] = 'TestKey';
@@ -932,7 +1068,69 @@ final class auth_plugin_test extends advanced_testcase {
 
         $this->expectException(moodle_exception::class);
         $this->expectExceptionMessage(
-            'Unsupported redirect to http://test.com/course/index.php?id=12&key=134 detected, execution terminated'
+            "Unsupported redirect to {$CFG->wwwroot} detected, execution terminated"
+        );
+
+        // Using @ is the only way to test this. Thanks moodle!
+        @$this->auth->user_login_userkey();
+    }
+
+    /**
+     * Test that a user gets redirected to an allowlisted external wantsurl.
+     */
+    public function test_that_user_gets_redirected_to_allowed_external_wantsurl(): void {
+        set_config('allowedredirecthosts', 'example.org; test.com', 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+        $this->create_user_private_key();
+
+        $_POST['key'] = 'TestKey';
+        $_POST['wantsurl'] = 'https://test.com/course/index.php?id=12&key=134';
+
+        $this->expectException(moodle_exception::class);
+        $this->expectExceptionMessage(
+            'Unsupported redirect to https://test.com/course/index.php?id=12&key=134 detected, execution terminated'
+        );
+
+        // Using @ is the only way to test this. Thanks moodle!
+        @$this->auth->user_login_userkey();
+    }
+
+    /**
+     * Test that URL credentials cannot bypass an allowed host check.
+     */
+    public function test_that_external_wantsurl_with_credentials_is_blocked(): void {
+        global $CFG;
+
+        set_config('allowedredirecthosts', 'test.com', 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+        $this->create_user_private_key();
+
+        $_POST['key'] = 'TestKey';
+        $_POST['wantsurl'] = 'https://trusted.example@test.com/course/index.php';
+
+        $this->expectException(moodle_exception::class);
+        $this->expectExceptionMessage(
+            "Unsupported redirect to {$CFG->wwwroot} detected, execution terminated"
+        );
+
+        // Using @ is the only way to test this. Thanks moodle!
+        @$this->auth->user_login_userkey();
+    }
+
+    /**
+     * Test that a protocol-relative wantsurl is not mistaken for a local URL.
+     */
+    public function test_that_protocol_relative_wantsurl_is_blocked(): void {
+        global $CFG;
+
+        $this->create_user_private_key();
+
+        $_POST['key'] = 'TestKey';
+        $_POST['wantsurl'] = '//evil.example/course/index.php';
+
+        $this->expectException(moodle_exception::class);
+        $this->expectExceptionMessage(
+            "Unsupported redirect to {$CFG->wwwroot} detected, execution terminated"
         );
 
         // Using @ is the only way to test this. Thanks moodle!
@@ -1024,10 +1222,10 @@ final class auth_plugin_test extends advanced_testcase {
     }
 
     /**
-     * Test that if one user logged, he will be logged out before a new one is authorised.
+     * Test that a key for a different user cannot replace the active session.
      */
-    public function test_that_different_authorised_user_is_logged_out_and_new_one_logged_in(): void {
-        global $USER, $SESSION;
+    public function test_that_different_authorised_user_does_not_replace_active_session(): void {
+        global $DB, $USER;
 
         $user = $this->getDataGenerator()->create_user();
         $this->setUser($user);
@@ -1036,22 +1234,100 @@ final class auth_plugin_test extends advanced_testcase {
         $this->create_user_private_key();
 
         $_POST['key'] = 'TestKey';
-
         try {
-            // Using @ is the only way to test this. Thanks moodle!
             @$this->auth->user_login_userkey();
+            $this->fail('A different-user login must be rejected.');
         } catch (moodle_exception $e) {
-            $this->assertEquals($this->user->id, $USER->id);
+            $this->assertSame(get_string('differentuserloggedin', 'auth_userkey'), $e->getMessage());
+            $this->assertSame($user->id, $USER->id);
             $this->assertSame(sesskey(), $USER->sesskey);
-            $this->assertObjectHasProperty('userkey', $SESSION);
+            $this->assertTrue($DB->record_exists('user_private_key', ['value' => 'TestKey']));
         }
     }
 
     /**
-     * Test that authorised user gets logged out when trying to logged in with invalid key.
+     * Test that a suspended user cannot use an otherwise valid key.
      */
-    public function test_if_invalid_key_authorised_user_gets_logged_out(): void {
-        global $USER, $SESSION;
+    public function test_that_suspended_user_cannot_log_in(): void {
+        global $DB;
+
+        $DB->set_field('user', 'suspended', 1, ['id' => $this->user->id]);
+        $this->create_user_private_key();
+        $_POST['key'] = 'TestKey';
+
+        $sink = $this->redirectEvents();
+
+        try {
+            @$this->auth->user_login_userkey();
+            $this->fail('A suspended user must not be logged in.');
+        } catch (moodle_exception $e) {
+            $this->assertSame(get_string('loginnotallowed', 'auth_userkey'), $e->getMessage());
+            $this->assertFalse(isloggedin());
+            $this->assertFalse($DB->record_exists('user_private_key', ['value' => 'TestKey']));
+            $events = $sink->get_events();
+            $this->assertCount(1, $events);
+            $this->assertInstanceOf(\core\event\user_login_failed::class, $events[0]);
+            $this->assertSame(AUTH_LOGIN_SUSPENDED, $events[0]->other['reason']);
+        }
+    }
+
+    /**
+     * Test that an unconfirmed user cannot use an otherwise valid key.
+     */
+    public function test_that_unconfirmed_user_cannot_log_in(): void {
+        global $DB;
+
+        $DB->set_field('user', 'confirmed', 0, ['id' => $this->user->id]);
+        $this->create_user_private_key();
+        $_POST['key'] = 'TestKey';
+
+        $sink = $this->redirectEvents();
+
+        try {
+            @$this->auth->user_login_userkey();
+            $this->fail('An unconfirmed user must not be logged in.');
+        } catch (moodle_exception $e) {
+            $this->assertSame(get_string('loginnotallowed', 'auth_userkey'), $e->getMessage());
+            $this->assertFalse(isloggedin());
+            $this->assertFalse($DB->record_exists('user_private_key', ['value' => 'TestKey']));
+            $events = $sink->get_events();
+            $this->assertCount(1, $events);
+            $this->assertInstanceOf(\core\event\user_login_failed::class, $events[0]);
+            $this->assertSame(AUTH_LOGIN_UNAUTHORISED, $events[0]->other['reason']);
+        }
+    }
+
+    /**
+     * Test that a user promoted to site administrator after key issuance cannot consume the key.
+     */
+    public function test_that_site_administrator_cannot_log_in(): void {
+        global $CFG, $DB;
+
+        $this->create_user_private_key();
+        set_config('siteadmins', $CFG->siteadmins . ',' . $this->user->id);
+        $_POST['key'] = 'TestKey';
+
+        $sink = $this->redirectEvents();
+
+        try {
+            @$this->auth->user_login_userkey();
+            $this->fail('A site administrator must not be logged in using a user key.');
+        } catch (moodle_exception $e) {
+            $this->assertSame(get_string('siteadminnotallowed', 'auth_userkey'), $e->getMessage());
+            $this->assertFalse(isloggedin());
+            $this->assertFalse($DB->record_exists('user_private_key', ['value' => 'TestKey']));
+            $events = $sink->get_events();
+            $this->assertCount(1, $events);
+            $this->assertInstanceOf(\core\event\user_login_failed::class, $events[0]);
+            $this->assertSame(AUTH_LOGIN_UNAUTHORISED, $events[0]->other['reason']);
+        }
+    }
+
+    /**
+     * Test that an invalid key cannot terminate an active session.
+     */
+    public function test_invalid_key_does_not_log_out_authorised_user(): void {
+        global $DB, $USER;
 
         $user = $this->getDataGenerator()->create_user();
         $this->setUser($user);
@@ -1059,15 +1335,17 @@ final class auth_plugin_test extends advanced_testcase {
 
         $this->create_user_private_key();
 
-        $_POST['key'] = 'Incorrect Key';
+        $_POST['key'] = 'IncorrectKey';
 
         try {
             // Using @ is the only way to test this. Thanks moodle!
             @$this->auth->user_login_userkey();
+            $this->fail('An invalid key must be rejected.');
         } catch (moodle_exception $e) {
             $this->assertEquals('Incorrect key', $e->getMessage());
-            $this->assertEmpty($USER->id);
-            $this->assertEquals(new stdClass(), $SESSION);
+            $this->assertSame($user->id, $USER->id);
+            $this->assertSame(sesskey(), $USER->sesskey);
+            $this->assertTrue($DB->record_exists('user_private_key', ['value' => 'TestKey']));
         }
     }
 
@@ -1142,6 +1420,27 @@ final class auth_plugin_test extends advanced_testcase {
     }
 
     /**
+     * Test that a userkey session cannot be logged out without a valid sesskey.
+     */
+    public function test_user_logout_userkey_requires_sesskey(): void {
+        global $SESSION, $USER;
+
+        $this->setUser($this->user);
+        $SESSION->userkey = true;
+        $_POST['return'] = self::REDIRECTION_PATH;
+        $_POST['sesskey'] = 'invalid';
+
+        try {
+            $this->auth->user_logout_userkey();
+            $this->fail('Logout without a sesskey must be rejected.');
+        } catch (moodle_exception $e) {
+            $this->assertSame(get_string('invalidsesskey', 'error'), $e->getMessage());
+            $this->assertSame($this->user->id, $USER->id);
+            $this->assertTrue(isloggedin());
+        }
+    }
+
+    /**
      * Test when try to logout, but user logged in with different auth type.
      */
     public function test_user_logout_userkey_when_user_logged_in_but_return_not_set(): void {
@@ -1157,11 +1456,12 @@ final class auth_plugin_test extends advanced_testcase {
      * Test successful logout.
      */
     public function test_user_logout_userkey_logging_out(): void {
-        global $USER;
+        global $SESSION;
 
         $this->setUser($this->user);
-        $USER->auth = 'userkey';
+        $SESSION->userkey = true;
         $_POST['return'] = self::REDIRECTION_PATH;
+        $_POST['sesskey'] = sesskey();
 
         try {
             $this->auth->user_logout_userkey();
@@ -1172,5 +1472,21 @@ final class auth_plugin_test extends advanced_testcase {
                 $e->getMessage()
             );
         }
+    }
+
+    /**
+     * Test that a protocol-relative logout return URL cannot redirect off-site.
+     */
+    public function test_user_logout_userkey_blocks_protocol_relative_return(): void {
+        global $CFG;
+
+        $_POST['return'] = '//evil.example/path';
+
+        $this->expectException(moodle_exception::class);
+        $this->expectExceptionMessage(
+            "Unsupported redirect to {$CFG->wwwroot} detected, execution terminated."
+        );
+
+        $this->auth->user_logout_userkey();
     }
 }

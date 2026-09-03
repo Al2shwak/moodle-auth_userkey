@@ -16,11 +16,10 @@
 
 namespace auth_userkey;
 
+use PHPUnit\Framework\Attributes\CoversClass;
+
 /**
  * Tests for core_userkey_manager class.
- *
- * Key validation is fully covered in auth_plugin_test.php file.
- * TODO: write tests for validate_key() function.
  *
  * @covers \auth_userkey\core_userkey_manager
  *
@@ -28,6 +27,7 @@ namespace auth_userkey;
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+#[CoversClass(core_userkey_manager::class)]
 final class core_userkey_manager_test extends \advanced_testcase {
     /**
      * Test user object.
@@ -288,5 +288,25 @@ final class core_userkey_manager_test extends \advanced_testcase {
         $manager->create_key($this->user->id);
         $keys = $DB->get_records('user_private_key', ['userid' => $this->user->id]);
         $this->assertEquals(1, count($keys));
+    }
+
+    /**
+     * Test that a key is expired at its valid-until timestamp.
+     */
+    public function test_key_expires_at_valid_until_timestamp(): void {
+        $clock = $this->mock_clock_with_frozen();
+        $manager = new core_userkey_manager($this->config);
+        $value = create_user_key(
+            core_userkey_manager::CORE_USER_KEY_MANAGER_SCRIPT,
+            $this->user->id,
+            $this->user->id,
+            null,
+            $clock->time()
+        );
+
+        $this->expectException(\moodle_exception::class);
+        $this->expectExceptionMessage('Expired key');
+
+        $manager->validate_key($value);
     }
 }

@@ -26,9 +26,7 @@ defined('MOODLE_INTERNAL') || die;
 
 $functions = [
     'auth_userkey_request_login_url' => [
-        'classname'   => 'auth_userkey_external',
-        'methodname'  => 'request_login_url',
-        'classpath'   => 'auth/userkey/externallib.php',
+        'classname'   => 'auth_userkey\\external\\request_login_url',
         'description' => 'Return one time key based login URL',
         'type'        => 'write',
         'capabilities'  => 'auth/userkey:generatekey',
@@ -38,6 +36,7 @@ $functions = [
 $services = [
     'User key authentication web service' => [
         'functions' => ['auth_userkey_request_login_url'],
+        'shortname' => 'auth_userkey',
         'restrictedusers' => 1,
         'enabled' => 1,
     ],

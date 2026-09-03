@@ -58,8 +58,10 @@ class auth_plugin_userkey extends auth_plugin_base {
         'iprestriction' => 0,
         'ipwhitelist' => '',
         'redirecturl' => '',
+        'allowedredirecthosts' => '',
         'ssourl' => '',
         'createuser' => false,
+        'createusercohorts' => '',
         'updateuser' => false,
     ];
 
@@ -136,31 +138,18 @@ class auth_plugin_userkey extends auth_plugin_base {
      * @throws \moodle_exception If something went wrong.
      */
     public function user_login_userkey() {
-        global $SESSION, $CFG, $USER;
+        global $SESSION, $USER;
 
         $keyvalue = required_param('key', PARAM_ALPHANUM);
         $wantsurl = optional_param('wantsurl', '', PARAM_URL);
+        $redirecturl = $this->get_redirect_url($wantsurl);
 
-        if (!empty($wantsurl)) {
-            $redirecturl = $wantsurl;
-        } else {
-            $redirecturl = $CFG->wwwroot;
-        }
-
-        try {
-            $key = $this->userkeymanager->validate_key($keyvalue);
-        } catch (moodle_exception $exception) {
-            // If user is logged in and key is not valid, we'd like to logout a user.
-            if (isloggedin()) {
-                require_logout();
-            }
-            throw $exception;
-        }
+        $key = $this->userkeymanager->validate_key($keyvalue);
 
         if (isloggedin()) {
             if ($USER->id != $key->userid) {
-                // Logout the current user if it's different to one that associated to the valid key.
-                require_logout();
+                // A bearer link must not be able to terminate or replace an active user's session.
+                throw new moodle_exception('differentuserloggedin', 'auth_userkey');
             } else {
                 // Don't process further if the user is already logged in.
                 $this->userkeymanager->delete_keys($key->userid);
@@ -171,6 +160,33 @@ class auth_plugin_userkey extends auth_plugin_base {
         $this->userkeymanager->delete_keys($key->userid);
 
         $user = get_complete_user_data('id', $key->userid);
+        if (!$user || !empty($user->deleted) || !\core_user::is_real_user($user->id)) {
+            throw new moodle_exception('invalidkey');
+        }
+
+        if (is_siteadmin($user)) {
+            \core\event\user_login_failed::create([
+                'userid' => $user->id,
+                'other' => [
+                    'username' => $user->username,
+                    'reason' => AUTH_LOGIN_UNAUTHORISED,
+                ],
+            ])->trigger();
+            throw new moodle_exception('siteadminnotallowed', 'auth_userkey');
+        }
+
+        if (empty($user->confirmed) || !empty($user->suspended) || $user->auth === 'nologin') {
+            $reason = empty($user->confirmed) ? AUTH_LOGIN_UNAUTHORISED : AUTH_LOGIN_SUSPENDED;
+            \core\event\user_login_failed::create([
+                'userid' => $user->id,
+                'other' => [
+                    'username' => $user->username,
+                    'reason' => $reason,
+                ],
+            ])->trigger();
+            throw new moodle_exception('loginnotallowed', 'auth_userkey');
+        }
+
         complete_user_login($user);
 
         // Identify this session as using user key auth method.
@@ -308,8 +324,55 @@ class auth_plugin_userkey extends auth_plugin_base {
             throw new invalid_parameter_exception('Email address already exists: ' . $user['email']);
         }
 
+        $transaction = $DB->start_delegated_transaction();
         $userid = user_create_user($user);
+        $this->add_user_to_configured_cohorts($userid);
+        $transaction->allow_commit();
+
         return $DB->get_record('user', ['id' => $userid]);
+    }
+
+    /**
+     * Add a newly created user to the cohorts selected in the plugin settings.
+     *
+     * Cohorts which have been deleted since the setting was saved are ignored.
+     *
+     * @param int $userid User ID.
+     */
+    protected function add_user_to_configured_cohorts(int $userid): void {
+        global $CFG, $DB;
+
+        $cohortids = $this->get_configured_cohort_ids();
+        if (empty($cohortids)) {
+            return;
+        }
+
+        require_once($CFG->dirroot . '/cohort/lib.php');
+        $cohorts = $DB->get_records_list('cohort', 'id', $cohortids, '', 'id');
+        foreach ($cohorts as $cohort) {
+            cohort_add_member($cohort->id, $userid);
+        }
+    }
+
+    /**
+     * Return the valid cohort IDs stored by the multi-select setting.
+     *
+     * @return int[] Cohort IDs.
+     */
+    protected function get_configured_cohort_ids(): array {
+        if (empty($this->config->createusercohorts)) {
+            return [];
+        }
+
+        $configured = is_array($this->config->createusercohorts)
+            ? $this->config->createusercohorts
+            : explode(',', $this->config->createusercohorts);
+        $cohortids = array_map('intval', $configured);
+        $cohortids = array_filter($cohortids, static function (int $cohortid): bool {
+            return $cohortid > 0;
+        });
+
+        return array_values(array_unique($cohortids));
     }
 
     /**
@@ -391,8 +454,13 @@ class auth_plugin_userkey extends auth_plugin_base {
             throw new invalid_parameter_exception('Required field "' . $mappingfield . '" is not set or empty.');
         }
 
-        if ($this->is_ip_restriction_enabled() && !isset($data['ip'])) {
-            throw new invalid_parameter_exception('Required parameter "ip" is not set.');
+        if ($this->is_ip_restriction_enabled()) {
+            if (empty($data['ip'])) {
+                throw new invalid_parameter_exception('Required parameter "ip" is not set.');
+            }
+            if (!\core\ip_utils::is_ip_address($data['ip'])) {
+                throw new invalid_parameter_exception('IP address is invalid.');
+            }
         }
 
         return $data;
@@ -415,9 +483,16 @@ class auth_plugin_userkey extends auth_plugin_base {
         $params = [
             $mappingfield => $data[$mappingfield],
             'mnethostid' => $CFG->mnet_localhost_id,
+            'deleted' => 0,
         ];
 
-        $user = $DB->get_record('user', $params);
+        // Mapping values such as email and idnumber are not guaranteed to be unique. Never issue
+        // a bearer key when the requested identity could resolve to more than one account.
+        $users = $DB->get_records('user', $params, 'id ASC', '*', 0, 2);
+        if (count($users) > 1) {
+            throw new invalid_parameter_exception('Multiple users match the configured mapping field');
+        }
+        $user = reset($users);
 
         if (empty($user)) {
             if ($this->should_create_user()) {
@@ -425,6 +500,12 @@ class auth_plugin_userkey extends auth_plugin_base {
             } else {
                 throw new invalid_parameter_exception('User is not exist');
             }
+        } else if (!\core_user::is_real_user($user->id) || empty($user->confirmed)) {
+            throw new invalid_parameter_exception('User is not active');
+        } else if (!empty($user->suspended) || $user->auth === 'nologin') {
+            throw new invalid_parameter_exception('User is suspended');
+        } else if (is_siteadmin($user)) {
+            throw new invalid_parameter_exception(get_string('siteadminnotallowed', 'auth_userkey'));
         } else if ($this->should_update_user()) {
             $user = $this->update_user($user, $data);
         }
@@ -556,7 +637,7 @@ class auth_plugin_userkey extends auth_plugin_base {
 
         if ($this->is_ip_restriction_enabled()) {
             $parameters['ip'] = new external_value(
-                PARAM_HOST,
+                PARAM_RAW_TRIMMED,
                 'User IP address'
             );
         }
@@ -658,18 +739,78 @@ class auth_plugin_userkey extends auth_plugin_base {
      * Log out user and redirect.
      */
     public function user_logout_userkey() {
-        global $CFG, $USER;
+        global $CFG, $SESSION;
 
         $redirect = required_param('return', PARAM_LOCALURL);
+        if ($redirect === '' || preg_match('~^[\\\\/]{2}~', $redirect)) {
+            $redirect = $CFG->wwwroot;
+        }
 
-        // We redirect when user's session in Moodle already has expired
-        // or the user is still logged in using "userkey" auth type.
-        if (!isloggedin() || $USER->auth == 'userkey') {
-            require_logout();
+        // If the session has already expired, there is no state-changing action to protect.
+        if (!isloggedin()) {
             $this->redirect($redirect);
-        } else {
-            // If logged in with different auth type, then display an error.
+        }
+
+        // Only sessions established through this plugin may use its logout endpoint.
+        if (empty($SESSION->userkey)) {
             throw new moodle_exception('incorrectlogout', 'auth_userkey', $CFG->wwwroot);
         }
+
+        require_sesskey();
+        require_logout();
+        $this->redirect($redirect);
+    }
+
+    /**
+     * Return a safe post-login redirect URL.
+     *
+     * Local Moodle URLs are always accepted. An external HTTP(S) URL is accepted only when its
+     * host is explicitly configured in the allowed redirect hosts setting.
+     *
+     * @param string $wantsurl Requested redirect URL.
+     * @return string Safe redirect URL.
+     */
+    protected function get_redirect_url(string $wantsurl): string {
+        global $CFG;
+
+        if ($wantsurl === '') {
+            return $CFG->wwwroot;
+        }
+
+        // Browsers interpret a double slash as a protocol-relative external URL, while
+        // PARAM_LOCALURL accepts any value beginning with a slash as root-relative.
+        if (preg_match('~^[\\\\/]{2}~', $wantsurl)) {
+            return $CFG->wwwroot;
+        }
+
+        $localurl = clean_param($wantsurl, PARAM_LOCALURL);
+        if ($localurl !== '') {
+            return $localurl;
+        }
+
+        $parts = parse_url($wantsurl);
+        if (
+            $parts === false
+            || empty($parts['host'])
+            || empty($parts['scheme'])
+            || !in_array(core_text::strtolower($parts['scheme']), ['http', 'https'], true)
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || empty($this->config->allowedredirecthosts)
+        ) {
+            return $CFG->wwwroot;
+        }
+
+        $redirecthost = core_text::strtolower(rtrim($parts['host'], '.'));
+        $allowedhosts = preg_split('/[;,\r\n]+/', $this->config->allowedredirecthosts);
+
+        foreach ($allowedhosts as $allowedhost) {
+            $allowedhost = core_text::strtolower(rtrim(trim($allowedhost), '.'));
+            if ($allowedhost !== '' && $redirecthost === $allowedhost) {
+                return $wantsurl;
+            }
+        }
+
+        return $CFG->wwwroot;
     }
 }

@@ -22,10 +22,10 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-require_once(dirname(__FILE__) . '/../../config.php');
+require_once(__DIR__ . '/../../config.php'); // phpcs:ignore moodle.Files.RequireLogin.Missing
 
 if (!is_enabled_auth('userkey')) {
-    throw new moodle_exception(get_string('pluginisdisabled', 'auth_userkey'));
+    throw new moodle_exception('pluginisdisabled', 'auth_userkey');
 }
 
 get_auth_plugin('userkey')->user_logout_userkey();

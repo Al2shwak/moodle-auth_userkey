@@ -15,28 +15,25 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace auth_userkey;
-defined('MOODLE_INTERNAL') || die();
 
 use advanced_testcase;
-use webservice_access_exception;
-use auth_userkey_external;
+use auth_userkey\external\request_login_url;
 use core_external\external_api;
 use invalid_parameter_exception;
+use moodle_exception;
+use PHPUnit\Framework\Attributes\CoversClass;
 use required_capability_exception;
 use context_system;
-global $CFG;
-require_once($CFG->dirroot . '/webservice/lib.php');
-require_once($CFG->dirroot . '/auth/userkey/externallib.php');
-
 /**
- * Tests for externallib.php.
+ * Tests for the request login URL external function.
  *
- * @covers \auth_userkey_external
+ * @covers \auth_userkey\external\request_login_url
  *
  * @package    auth_userkey
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
+#[CoversClass(request_login_url::class)]
 final class externallib_test extends advanced_testcase {
     /**
      * User object.
@@ -46,10 +43,24 @@ final class externallib_test extends advanced_testcase {
     protected $user = [];
 
     /**
+     * Test that the bundled restricted service has the shortname required by the token endpoint.
+     */
+    public function test_service_declaration_has_shortname(): void {
+        global $CFG;
+
+        $functions = [];
+        $services = [];
+        require($CFG->dirroot . '/auth/userkey/db/services.php');
+
+        $service = $services['User key authentication web service'];
+        $this->assertSame('auth_userkey', $service['shortname']);
+        $this->assertSame(1, $service['restrictedusers']);
+    }
+
+    /**
      * Initial set up.
      */
     public function setUp(): void {
-        global $CFG;
         parent::setUp();
 
         $this->resetAfterTest();
@@ -71,12 +82,12 @@ final class externallib_test extends advanced_testcase {
             'bla' => 'exists@test.com',
         ];
 
-        $this->expectException(webservice_access_exception::class);
-        $this->expectExceptionMessage('Access control exception (The userkey authentication plugin is disabled.)');
+        $this->expectException(moodle_exception::class);
+        $this->expectExceptionMessage('The userkey authentication plugin is disabled.');
 
         // Simulate the web service server.
-        $result = auth_userkey_external::request_login_url($params);
-        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+        $result = request_login_url::execute($params);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
     }
 
     /**
@@ -94,8 +105,8 @@ final class externallib_test extends advanced_testcase {
         ];
 
         // Simulate the web service server.
-        $result = auth_userkey_external::request_login_url($params);
-        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+        $result = request_login_url::execute($params);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
 
         $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
@@ -111,8 +122,8 @@ final class externallib_test extends advanced_testcase {
         ];
 
         // Simulate the web service server.
-        $result = auth_userkey_external::request_login_url($params);
-        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+        $result = request_login_url::execute($params);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
 
         $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
@@ -128,8 +139,8 @@ final class externallib_test extends advanced_testcase {
         ];
 
         // Simulate the web service server.
-        $result = auth_userkey_external::request_login_url($params);
-        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+        $result = request_login_url::execute($params);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
 
         $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
@@ -145,8 +156,8 @@ final class externallib_test extends advanced_testcase {
         ];
 
         // Simulate the web service server.
-        $result = auth_userkey_external::request_login_url($params);
-        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+        $result = request_login_url::execute($params);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
 
         $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
@@ -164,8 +175,8 @@ final class externallib_test extends advanced_testcase {
         ];
 
         // Simulate the web service server.
-        $result = auth_userkey_external::request_login_url($params);
-        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+        $result = request_login_url::execute($params);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
 
         $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
@@ -189,9 +200,9 @@ final class externallib_test extends advanced_testcase {
         ];
 
         $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (Required field "email" is not set or empty.)');
+        $this->expectExceptionMessage('Missing required key in single structure: email');
 
-        auth_userkey_external::request_login_url($params);
+        request_login_url::execute($params);
     }
 
     /**
@@ -210,9 +221,28 @@ final class externallib_test extends advanced_testcase {
         ];
 
         $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (Required parameter "ip" is not set.)');
+        $this->expectExceptionMessage('Missing required key in single structure: ip');
 
-        auth_userkey_external::request_login_url($params);
+        request_login_url::execute($params);
+    }
+
+    /**
+     * Test that IP restriction rejects a hostname instead of silently treating it as an IP address.
+     */
+    public function test_exception_thrown_if_ip_is_not_an_address(): void {
+        global $CFG;
+
+        $this->setAdminUser();
+        $CFG->auth = 'userkey';
+        set_config('iprestriction', true, 'auth_userkey');
+
+        $this->expectException(invalid_parameter_exception::class);
+        $this->expectExceptionMessage('Invalid parameter value detected (IP address is invalid.)');
+
+        request_login_url::execute([
+            'email' => 'exists@test.com',
+            'ip' => 'example.com',
+        ]);
     }
 
     /**
@@ -232,8 +262,40 @@ final class externallib_test extends advanced_testcase {
         $this->expectExceptionMessage('Invalid parameter value detected (User is not exist)');
 
         // Simulate the web service server.
-        $result = auth_userkey_external::request_login_url($params);
-        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+        $result = request_login_url::execute($params);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
+    }
+
+    /**
+     * Test that a login URL is not generated for a suspended user.
+     */
+    public function test_request_suspended_user(): void {
+        global $CFG, $DB;
+
+        $this->setAdminUser();
+        $CFG->auth = 'userkey';
+        $DB->set_field('user', 'suspended', 1, ['id' => $this->user->id]);
+
+        $this->expectException(invalid_parameter_exception::class);
+        $this->expectExceptionMessage('Invalid parameter value detected (User is suspended)');
+
+        request_login_url::execute(['email' => 'exists@test.com']);
+    }
+
+    /**
+     * Test that a login URL is not generated for an unconfirmed user.
+     */
+    public function test_request_unconfirmed_user(): void {
+        global $CFG, $DB;
+
+        $this->setAdminUser();
+        $CFG->auth = 'userkey';
+        $DB->set_field('user', 'confirmed', 0, ['id' => $this->user->id]);
+
+        $this->expectException(invalid_parameter_exception::class);
+        $this->expectExceptionMessage('Invalid parameter value detected (User is not active)');
+
+        request_login_url::execute(['email' => 'exists@test.com']);
     }
 
     /**
@@ -253,8 +315,8 @@ final class externallib_test extends advanced_testcase {
         $this->expectExceptionMessage('Sorry, but you do not currently have permissions to do that (Generate login user key)');
 
         // Simulate the web service server.
-        $result = auth_userkey_external::request_login_url($params);
-        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+        $result = request_login_url::execute($params);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
     }
 
     /**
@@ -276,8 +338,8 @@ final class externallib_test extends advanced_testcase {
         ];
 
         // Simulate the web service server.
-        $result = auth_userkey_external::request_login_url($params);
-        $result = external_api::clean_returnvalue(auth_userkey_external::request_login_url_returns(), $result);
+        $result = request_login_url::execute($params);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
 
         $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
         $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;

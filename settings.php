@@ -24,6 +24,8 @@
 
 defined('MOODLE_INTERNAL') || die;
 
+require_once($CFG->dirroot . '/cohort/lib.php');
+
 if ($ADMIN->fulltree) {
     $yesno = [get_string('no'), get_string('yes')];
     $fields = get_auth_plugin('userkey')->get_allowed_mapping_fields();
@@ -69,6 +71,14 @@ if ($ADMIN->fulltree) {
     ));
 
     $settings->add(new admin_setting_configtext(
+        'auth_userkey/allowedredirecthosts',
+        get_string('allowedredirecthosts', 'auth_userkey'),
+        get_string('allowedredirecthosts_desc', 'auth_userkey'),
+        '',
+        PARAM_TEXT
+    ));
+
+    $settings->add(new admin_setting_configtext(
         'auth_userkey/ssourl',
         get_string('ssourl', 'auth_userkey'),
         get_string('ssourl_desc', 'auth_userkey', 'auth'),
@@ -82,6 +92,26 @@ if ($ADMIN->fulltree) {
         new lang_string('createuser_desc', 'auth_userkey'),
         0,
         $yesno
+    ));
+
+    $cohortchoices = [];
+    $cohorts = cohort_get_all_cohorts(0, 0);
+    foreach ($cohorts['cohorts'] as $cohort) {
+        $cohortname = format_string($cohort->name, true, [
+            'context' => context::instance_by_id($cohort->contextid),
+        ]);
+        $cohortchoices[$cohort->id] = get_string('createusercohortoption', 'auth_userkey', [
+            'name' => $cohortname,
+            'id' => $cohort->id,
+        ]);
+    }
+
+    $settings->add(new admin_setting_configmultiselect(
+        'auth_userkey/createusercohorts',
+        new lang_string('createusercohorts', 'auth_userkey'),
+        new lang_string('createusercohorts_desc', 'auth_userkey'),
+        [],
+        $cohortchoices
     ));
 
     $settings->add(new admin_setting_configselect(

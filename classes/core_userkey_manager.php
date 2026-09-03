@@ -57,7 +57,7 @@ class core_userkey_manager implements userkey_manager_interface {
      * Create a user key.
      *
      * @param int $userid User ID.
-     * @param null|array $allowedips A list of allowed ips for this key.
+     * @param null|string $allowedips Allowed IP address for this key.
      *
      * @return string Generated key.
      */
@@ -95,7 +95,7 @@ class core_userkey_manager implements userkey_manager_interface {
      * @param int $userid User ID.
      */
     public function delete_keys($userid) {
-         delete_user_key(self::CORE_USER_KEY_MANAGER_SCRIPT, $userid);
+        delete_user_key(self::CORE_USER_KEY_MANAGER_SCRIPT, $userid);
     }
 
     /**
@@ -119,7 +119,7 @@ class core_userkey_manager implements userkey_manager_interface {
             throw new \moodle_exception('invalidkey');
         }
 
-        if (!empty($key->validuntil) && $key->validuntil < di::get(clock::class)->time()) {
+        if (!empty($key->validuntil) && $key->validuntil <= di::get(clock::class)->time()) {
             throw new \moodle_exception('expiredkey');
         }
 

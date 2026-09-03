@@ -34,7 +34,7 @@ interface userkey_manager_interface {
      * Create a user key.
      *
      * @param int $userid User ID.
-     * @param null|array $allowedips A list of allowed ips for this key.
+     * @param null|string $allowedips Allowed IP address for this key.
      *
      * @return string Generated key.
      */

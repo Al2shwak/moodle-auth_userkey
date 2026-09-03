@@ -23,9 +23,17 @@
  */
 
 defined('MOODLE_INTERNAL') || die;
+$string['allowedredirecthosts'] = 'Allowed redirect hosts';
+$string['allowedredirecthosts_desc'] = 'External hosts that users may be redirected to after key-based authentication. '
+    . 'Enter host names only, separated by semicolons, commas, or new lines. Leave empty to allow local Moodle URLs only.';
 $string['auth_userkeydescription'] = 'Log in to Moodle using one time user key.';
 $string['createuser'] = 'Create user?';
 $string['createuser_desc'] = 'If enabled, a new user will be created if fail to find one in LMS.';
+$string['createusercohortoption'] = '{$a->name} (ID: {$a->id})';
+$string['createusercohorts'] = 'Cohorts for newly created users';
+$string['createusercohorts_desc'] = 'Add users created by this plugin to the selected cohorts. Existing users are never '
+    . 'added. Cohort membership may also enrol users in courses that use cohort sync.';
+$string['differentuserloggedin'] = 'A different user is already logged in. Log out before using this login link.';
 $string['incorrectkeylifetime'] = 'User key life time should be a number';
 $string['incorrectlogout'] = 'Incorrect logout request';
 $string['incorrectredirecturl'] = 'You should provide valid URL';
@@ -39,6 +47,7 @@ $string['ipwhitelist_desc'] = "Ignore IP restrictions if the IP address the toke
 \nIf the route to either the system issuing tokens or this Moodle is via a private address range then set this value to 10.0.0.0/8;172.16.0.0/12;192.168.0.0/16";
 $string['keylifetime'] = 'User key life time';
 $string['keylifetime_desc'] = 'Life time in seconds of the each user login key.';
+$string['loginnotallowed'] = 'Login is not allowed for this account.';
 $string['mappingfield'] = 'Mapping field';
 $string['mappingfield_desc'] = 'This user field will be used to find relevant user in the LMS.';
 $string['noip'] = 'Unable to fetch IP address of client.';
@@ -48,9 +57,10 @@ $string['privacy:metadata'] = 'User key authentication plugin does not store any
 $string['redirecterrordetected'] = 'Unsupported redirect to {$a} detected, execution terminated.';
 $string['redirecturl'] = 'Logout redirect URL';
 $string['redirecturl_desc'] = 'Optionally you can redirect users to this URL after they logged out from LMS.';
+$string['siteadminnotallowed'] = 'Login keys cannot be generated or used for site administrators.';
 $string['ssourl'] = 'URL of SSO host';
 $string['ssourl_desc'] = 'URL of the SSO host to redirect users to. If defined users will be redirected here on login instead of the Moodle Login page';
 $string['updateuser'] = 'Update user?';
-$string['updateuser_desc'] = 'If enabled, users will be updated with the properties supplied when the webservice is called.';
+$string['updateuser_desc'] = 'If enabled, existing users will be updated with the properties supplied when the webservice is called, and their authentication method will be changed to User key authentication. Site administrators are never updated.';
 $string['userid'] = 'User ID';
 $string['userkey:generatekey'] = 'Generate login user key';

@@ -22,36 +22,23 @@
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-
-use core_external\external_api;
-use core_external\external_function_parameters;
-use core_external\external_single_structure;
-use core_external\external_value;
-
-require_once($CFG->dirroot . "/auth/userkey/auth.php");
+defined('MOODLE_INTERNAL') || die(); // phpcs:ignore moodle.Files.MoodleInternal.MoodleInternalNotNeeded
 
 /**
- * Webservices for auth_userkey.
+ * Backwards-compatible wrapper for the legacy external class name.
  *
  * @package    auth_userkey
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class auth_userkey_external extends external_api {
+class auth_userkey_external extends \auth_userkey\external\request_login_url {
     /**
-     * Return request_login_url webservice parameters.
+     * Describe the legacy external function parameters.
      *
-     * @return \external_function_parameters
+     * @return \core_external\external_function_parameters
      */
     public static function request_login_url_parameters() {
-        return new external_function_parameters(
-            [
-                'user' => new external_single_structure(
-                    get_auth_plugin('userkey')->get_request_login_url_user_parameters()
-                ),
-            ]
-        );
+        return parent::execute_parameters();
     }
 
     /**
@@ -61,36 +48,19 @@ class auth_userkey_external extends external_api {
      *
      * @return array
      * @throws \dml_exception
+     * @throws \moodle_exception
      * @throws \required_capability_exception
-     * @throws \webservice_access_exception
      */
     public static function request_login_url($user) {
-
-        if (!is_enabled_auth('userkey')) {
-            throw new webservice_access_exception(get_string('pluginisdisabled', 'auth_userkey'));
-        }
-
-        $context = context_system::instance();
-        require_capability('auth/userkey:generatekey', $context);
-
-        $auth = get_auth_plugin('userkey');
-        $loginurl = $auth->get_login_url($user);
-
-        return [
-            'loginurl' => $loginurl,
-        ];
+        return parent::execute($user);
     }
 
     /**
      * Describe request_login_url webservice return structure.
      *
-     * @return \external_single_structure
+     * @return \core_external\external_single_structure
      */
     public static function request_login_url_returns() {
-        return new external_single_structure(
-            [
-                'loginurl' => new external_value(PARAM_RAW, 'Login URL for a user to log in'),
-            ]
-        );
+        return parent::execute_returns();
     }
 }
