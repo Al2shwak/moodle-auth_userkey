@@ -86,6 +86,10 @@ For example XML-RPC (PHP structure) description for different mapping field sett
 Please navigate to API documentation to get full description for "auth_userkey_request_login_url" function.
 e.g. http://yourmoodle.com/admin/webservice/documentation.php
 
+The bundled restricted service also exposes Moodle's read-only `core_webservice_get_site_info` function. This
+allows the Hawza WordPress bridge to validate the service token and confirm that the User Key function is
+available without requesting a login URL or generating a one-time key.
+
 You can amend login URL by "wantsurl" parameter to redirect user after they logged in to Moodle.
 
 E.g. http://yourmoodle.com/auth/userkey/login.php?key=uniquekey&wantsurl=http://yourmoodle.com/course/view.php?id=3

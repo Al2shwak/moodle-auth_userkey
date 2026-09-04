@@ -55,6 +55,10 @@ final class externallib_test extends advanced_testcase {
         $service = $services['User key authentication web service'];
         $this->assertSame('auth_userkey', $service['shortname']);
         $this->assertSame(1, $service['restrictedusers']);
+        $this->assertSame([
+            'auth_userkey_request_login_url',
+            'core_webservice_get_site_info',
+        ], $service['functions']);
     }
 
     /**

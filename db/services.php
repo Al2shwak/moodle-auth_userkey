@@ -35,7 +35,10 @@ $functions = [
 
 $services = [
     'User key authentication web service' => [
-        'functions' => ['auth_userkey_request_login_url'],
+        'functions' => [
+            'auth_userkey_request_login_url',
+            'core_webservice_get_site_info',
+        ],
         'shortname' => 'auth_userkey',
         'restrictedusers' => 1,
         'enabled' => 1,
