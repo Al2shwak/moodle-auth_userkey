@@ -57,6 +57,7 @@ final class externallib_test extends advanced_testcase {
         $this->assertSame(1, $service['restrictedusers']);
         $this->assertSame([
             'auth_userkey_request_login_url',
+            'auth_userkey_provision_user_login',
             'core_webservice_get_site_info',
         ], $service['functions']);
     }

@@ -21,6 +21,8 @@ use auth_plugin_userkey;
 use stdClass;
 use invalid_parameter_exception;
 use moodle_exception;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
 use core_external\external_value;
 use PHPUnit\Framework\Attributes\CoversClass;
 
@@ -399,7 +401,7 @@ final class auth_plugin_test extends advanced_testcase {
         $user->ip = '192.168.1.1';
 
         $expected = $CFG->wwwroot . '/auth/userkey/login.php?key=FaKeKeyFoRtEsTiNg';
-        $actual = $this->auth->get_login_url($user);
+        $actual = $this->auth->provision_user_login($user);
 
         $this->assertEquals($expected, $actual);
 
@@ -409,6 +411,57 @@ final class auth_plugin_test extends advanced_testcase {
         $this->assertEquals($user->lastname, $userrecord->lastname);
         $this->assertEquals(1, $userrecord->confirmed);
         $this->assertEquals('userkey', $userrecord->auth);
+    }
+
+    /**
+     * Test that ordinary login never creates an unknown user.
+     */
+    public function test_login_does_not_create_user_when_creation_is_enabled(): void {
+        global $DB;
+
+        set_config('createuser', true, 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        $this->expectException(invalid_parameter_exception::class);
+        $this->expectExceptionMessage('User is not exist');
+
+        try {
+            $this->auth->get_login_url(['email' => 'newuser@example.com']);
+        } finally {
+            $this->assertFalse($DB->record_exists('user', ['email' => 'newuser@example.com']));
+        }
+    }
+
+    /**
+     * Test that provisioning stores standard Moodle custom profile fields.
+     */
+    public function test_provision_user_login_saves_custom_profile_fields(): void {
+        global $DB;
+
+        $field = self::getDataGenerator()->create_custom_profile_field([
+            'datatype' => 'text',
+            'shortname' => 'membershiptype',
+            'name' => 'Membership type',
+        ]);
+        set_config('createuser', true, 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+        $this->auth->set_userkey_manager(new fake_userkey_manager());
+
+        $this->auth->provision_user_login([
+            'username' => 'customfielduser',
+            'email' => 'customfielduser@example.com',
+            'firstname' => 'Custom',
+            'lastname' => 'Field',
+            'customfields' => [
+                ['type' => 'membershiptype', 'value' => 'sponsored'],
+            ],
+        ]);
+
+        $user = $DB->get_record('user', ['username' => 'customfielduser'], '*', MUST_EXIST);
+        $this->assertSame('sponsored', $DB->get_field('user_info_data', 'data', [
+            'userid' => $user->id,
+            'fieldid' => $field->id,
+        ], MUST_EXIST));
     }
 
     /**
@@ -426,7 +479,7 @@ final class auth_plugin_test extends advanced_testcase {
         $userkeymanager = new fake_userkey_manager();
         $this->auth->set_userkey_manager($userkeymanager);
 
-        $this->auth->get_login_url([
+        $this->auth->provision_user_login([
             'username' => 'cohortuser',
             'email' => 'cohortuser@example.com',
             'firstname' => 'Cohort',
@@ -458,7 +511,7 @@ final class auth_plugin_test extends advanced_testcase {
         $userkeymanager = new fake_userkey_manager();
         $this->auth->set_userkey_manager($userkeymanager);
 
-        $this->auth->get_login_url([
+        $this->auth->provision_user_login([
             'username' => 'validcohortuser',
             'email' => 'validcohortuser@example.com',
             'firstname' => 'Valid',
@@ -522,7 +575,7 @@ final class auth_plugin_test extends advanced_testcase {
         $this->expectException(invalid_parameter_exception::class);
         $this->expectExceptionMessage('Unable to create user, missing value(s): username,firstname,lastname');
 
-        $this->auth->get_login_url($user);
+        $this->auth->provision_user_login($user);
     }
 
     /**
@@ -551,7 +604,7 @@ final class auth_plugin_test extends advanced_testcase {
         $this->expectException(invalid_parameter_exception::class);
         $this->expectExceptionMessage('Username already exists: username');
 
-        $this->auth->get_login_url($duplicateuser);
+        $this->auth->provision_user_login($duplicateuser);
     }
 
     /**
@@ -581,7 +634,7 @@ final class auth_plugin_test extends advanced_testcase {
         $this->expectException(invalid_parameter_exception::class);
         $this->expectExceptionMessage('Email address already exists: username@test.com');
 
-        $this->auth->get_login_url($duplicateuser);
+        $this->auth->provision_user_login($duplicateuser);
     }
 
     /**
@@ -853,10 +906,6 @@ final class auth_plugin_test extends advanced_testcase {
         $this->auth = new auth_plugin_userkey();
         $expected = [
             'ip' => new external_value(PARAM_RAW_TRIMMED, 'User IP address'),
-            'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user', VALUE_OPTIONAL),
-            'lastname'  => new external_value(PARAM_NOTAGS, 'The family name of the user', VALUE_OPTIONAL),
-            'email'     => new external_value(PARAM_RAW_TRIMMED, 'A valid and unique email address', VALUE_OPTIONAL),
-            'username'  => new external_value(PARAM_USERNAME, 'A valid and unique username', VALUE_OPTIONAL),
         ];
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
@@ -875,6 +924,34 @@ final class auth_plugin_test extends advanced_testcase {
         $actual = $this->auth->get_request_login_url_user_parameters();
         $this->assertEquals($expected, $actual);
         set_config('updateuser', false, 'auth_userkey');
+    }
+
+    /**
+     * Test the fixed provisioning request schema, including extensible custom profile fields.
+     */
+    public function test_get_provision_user_login_parameters(): void {
+        $expected = [
+            'username' => new external_value(PARAM_USERNAME, 'A valid and unique username'),
+            'email' => new external_value(PARAM_EMAIL, 'A valid and unique email address'),
+            'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user'),
+            'lastname' => new external_value(PARAM_NOTAGS, 'The family name of the user'),
+            'idnumber' => new external_value(PARAM_RAW_TRIMMED, 'An optional institution ID number', VALUE_OPTIONAL),
+            'customfields' => new external_multiple_structure(
+                new external_single_structure([
+                    'type' => new external_value(PARAM_ALPHANUMEXT, 'The short name of the custom profile field'),
+                    'value' => new external_value(PARAM_RAW, 'The value of the custom profile field'),
+                ]),
+                'Custom user profile fields',
+                VALUE_OPTIONAL
+            ),
+        ];
+
+        $this->assertEquals($expected, $this->auth->get_provision_user_login_parameters());
+
+        set_config('iprestriction', true, 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+        $expected['ip'] = new external_value(PARAM_RAW_TRIMMED, 'User IP address');
+        $this->assertEquals($expected, $this->auth->get_provision_user_login_parameters());
     }
 
     /**

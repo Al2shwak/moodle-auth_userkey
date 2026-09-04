@@ -25,7 +25,8 @@ Using
 4. Enable the web services advanced feature (Site administration > General > Advanced features). See [Web services](https://docs.moodle.org/en/Web_services).
 5. Enable one of the supported protocols (Site administration > Server > Web services > Manage protocols).
 6. Create a token for a specific user and for the service 'User key authentication web service' (Site administration > Server > Web services > Manage tokens).
-7. Make sure that the web service user has the `auth/userkey:generatekey` capability.
+7. Make sure that the web service user has the `auth/userkey:generatekey` capability. If the integration will
+   register users, grant the same user `auth/userkey:createuser` as well.
 8. Authorise the web service user (Site administration > Server > Web services > External services > Authorised users).
 9. Configure your external application to request a login URL.
 10. Redirect the user to the returned URL.
@@ -34,6 +35,10 @@ The `auth/userkey:generatekey` capability permits impersonating any eligible Moo
 privileged non-administrator accounts. Site administrators are excluded from key-based login and must use
 another configured Moodle authentication method. Grant this capability only to a dedicated, tightly controlled
 web-service account and protect its token as a privileged credential.
+
+The same restricted service and token can call all bundled functions. Granting `auth/userkey:createuser` makes
+that token capable of creating confirmed accounts and should therefore be limited to a trusted server-side
+integration.
 
 Configuration
 -------------
@@ -83,12 +88,45 @@ For example XML-RPC (PHP structure) description for different mapping field sett
         [loginurl] => string
         )
 
-Please navigate to API documentation to get full description for "auth_userkey_request_login_url" function.
+`auth_userkey_request_login_url` only logs in an existing user. It never creates a missing account, even when
+**Create user?** is enabled. If **Update user?** is enabled, it retains the existing update-on-login behaviour.
+
+Please navigate to API documentation to get the full description for the external functions.
 e.g. http://yourmoodle.com/admin/webservice/documentation.php
 
 The bundled restricted service also exposes Moodle's read-only `core_webservice_get_site_info` function. This
 allows the Hawza WordPress bridge to validate the service token and confirm that the User Key function is
 available without requesting a login URL or generating a one-time key.
+
+**Provision and log in a new user**
+
+`auth_userkey_provision_user_login` creates a new user and returns that user's first one-time login URL in one
+call. It requires both `auth/userkey:createuser` and `auth/userkey:generatekey`, and the **Create user?** setting
+must be enabled. Existing usernames and email addresses are rejected rather than treated as login requests.
+
+Required user fields are `username`, `email`, `firstname`, and `lastname`. The optional `idnumber` field and
+Moodle custom user profile fields are supported. Custom fields use Moodle's standard structure:
+
+    [user] =>
+        Array
+            (
+            [username] => newstudent
+            [email] => newstudent@example.com
+            [firstname] => New
+            [lastname] => Student
+            [customfields] => Array
+                (
+                [0] => Array
+                    (
+                    [type] => membershiptype
+                    [value] => sponsored
+                    )
+                )
+            )
+
+For REST requests, the equivalent custom-field parameters are
+`user[customfields][0][type]=membershiptype` and `user[customfields][0][value]=sponsored`. The `type` value is
+the custom profile field short name configured in Moodle.
 
 You can amend login URL by "wantsurl" parameter to redirect user after they logged in to Moodle.
 
@@ -107,9 +145,10 @@ authentication method.
 
 **Cohorts for newly created users**
 
-When **Create user?** is enabled, the plugin can add each account it creates to one or more selected Moodle
-cohorts. This applies only at account creation; requesting a key for an existing user or updating an existing
-user does not change their cohort memberships. Deleted cohorts left in an older saved configuration are skipped.
+When **Create user?** is enabled, `auth_userkey_provision_user_login` can add each account it creates to one or
+more selected Moodle cohorts. This applies only at account creation; requesting a key for an existing user or
+updating an existing user does not change their cohort memberships. Deleted cohorts left in an older saved
+configuration are skipped.
 
 Adding a user to a cohort can also enrol that user into courses configured with Moodle's cohort sync enrolment
 method. Treat this setting as part of the access granted to accounts created through the SSO web service.
@@ -153,16 +192,16 @@ In case when a user session is already expired, the user will be still redirecte
 
 **Note:** the code below is not for production use. It's just a quick and dirty way to test the functionality.
 
-The code below defines a function that can be used to obtain a login url.
-You will need to add/remove parameters depending on whether you have update/create user enabled and which mapping field you are using.
+The code below defines a function that can be used to obtain a login URL for an existing user. You will need to
+add or remove profile parameters depending on whether updating is enabled and which mapping field you are using.
 
 The required library curl can be obtained from https://github.com/moodlehq/sample-ws-clients
 ```php
 /**
  * @param   string $useremail Email address of user to create token for.
- * @param   string $firstname First name of user (used to update/create user).
- * @param   string $lastname Last name of user (used to update/create user).
- * @param   string $username Username of user (used to update/create user).
+ * @param   string $firstname First name of user (used only when updating is enabled).
+ * @param   string $lastname Last name of user (used only when updating is enabled).
+ * @param   string $username Username of user (used for mapping or optional updating).
  * @param   string $ipaddress IP address of end user that login request will come from (probably $_SERVER['REMOTE_ADDR']).
  * @param int      $courseid Course id to send logged in users to, defaults to site home.
  * @param int      $modname Name of course module to send users to, defaults to none.
@@ -178,8 +217,8 @@ function getloginurl($useremail, $firstname, $lastname, $username, $courseid = n
 
     $param = [
         'user' => [
-            'firstname' => $firstname, // You will not need this parameter, if you are not creating/updating users
-            'lastname'  => $lastname, // You will not need this parameter, if you are not creating/updating users
+            'firstname' => $firstname, // Not needed if you are not updating users.
+            'lastname'  => $lastname, // Not needed if you are not updating users.
             'username'  => $username,
             'email'     => $useremail,
         ]

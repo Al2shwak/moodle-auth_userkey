@@ -31,12 +31,19 @@ $functions = [
         'type'        => 'write',
         'capabilities'  => 'auth/userkey:generatekey',
     ],
+    'auth_userkey_provision_user_login' => [
+        'classname'   => 'auth_userkey\\external\\provision_user_login',
+        'description' => 'Create a user and return a one-time login URL',
+        'type'        => 'write',
+        'capabilities' => 'auth/userkey:createuser,auth/userkey:generatekey',
+    ],
 ];
 
 $services = [
     'User key authentication web service' => [
         'functions' => [
             'auth_userkey_request_login_url',
+            'auth_userkey_provision_user_login',
             'core_webservice_get_site_info',
         ],
         'shortname' => 'auth_userkey',

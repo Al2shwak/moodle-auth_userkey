@@ -28,7 +28,8 @@ $string['allowedredirecthosts_desc'] = 'External hosts that users may be redirec
     . 'Enter host names only, separated by semicolons, commas, or new lines. Leave empty to allow local Moodle URLs only.';
 $string['auth_userkeydescription'] = 'Log in to Moodle using one time user key.';
 $string['createuser'] = 'Create user?';
-$string['createuser_desc'] = 'If enabled, a new user will be created if fail to find one in LMS.';
+$string['createuser_desc'] = 'If enabled, the provisioning web service can create a new user and return a one-time '
+    . 'login URL. The ordinary login web service never creates users.';
 $string['createusercohortoption'] = '{$a->name} (ID: {$a->id})';
 $string['createusercohorts'] = 'Cohorts for newly created users';
 $string['createusercohorts_desc'] = 'Add users created by this plugin to the selected cohorts. Existing users are never '
@@ -62,5 +63,7 @@ $string['ssourl'] = 'URL of SSO host';
 $string['ssourl_desc'] = 'URL of the SSO host to redirect users to. If defined users will be redirected here on login instead of the Moodle Login page';
 $string['updateuser'] = 'Update user?';
 $string['updateuser_desc'] = 'If enabled, existing users will be updated with the properties supplied when the webservice is called, and their authentication method will be changed to User key authentication. Site administrators are never updated.';
+$string['usercreationdisabled'] = 'User creation is disabled.';
 $string['userid'] = 'User ID';
+$string['userkey:createuser'] = 'Create users through User key provisioning';
 $string['userkey:generatekey'] = 'Generate login user key';

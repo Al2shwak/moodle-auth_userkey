@@ -26,6 +26,8 @@ defined('MOODLE_INTERNAL') || die();
 
 use auth_userkey\core_userkey_manager;
 use auth_userkey\userkey_manager_interface;
+use core_external\external_multiple_structure;
+use core_external\external_single_structure;
 use core_external\external_value;
 
 require_once($CFG->libdir . '/authlib.php');
@@ -297,6 +299,8 @@ class auth_plugin_userkey extends auth_plugin_base {
 
         $user = $data;
         unset($user['ip']);
+        $customfields = $user['customfields'] ?? [];
+        unset($user['customfields']);
         $user['auth'] = 'userkey';
         $user['confirmed'] = 1;
         $user['mnethostid'] = $CFG->mnet_localhost_id;
@@ -317,16 +321,31 @@ class auth_plugin_userkey extends auth_plugin_base {
         }
         if (!validate_email($user['email'])) {
             throw new invalid_parameter_exception('Email address is invalid: ' . $user['email']);
-        } else if (
-            empty($CFG->allowaccountssameemail) &&
-            $DB->record_exists('user', ['email' => $user['email'], 'mnethostid' => $user['mnethostid']])
-        ) {
-            throw new invalid_parameter_exception('Email address already exists: ' . $user['email']);
+        } else if (empty($CFG->allowaccountssameemail)) {
+            $select = $DB->sql_equal('email', ':email', false) . ' AND mnethostid = :mnethostid';
+            if (
+                $DB->record_exists_select('user', $select, [
+                    'email' => $user['email'],
+                    'mnethostid' => $user['mnethostid'],
+                ])
+            ) {
+                throw new invalid_parameter_exception('Email address already exists: ' . $user['email']);
+            }
         }
 
         $transaction = $DB->start_delegated_transaction();
-        $userid = user_create_user($user);
+        // Delay the event until profile fields and cohort memberships are part of the completed account.
+        $userid = user_create_user($user, true, false);
+        if (!empty($customfields)) {
+            require_once($CFG->dirroot . '/user/profile/lib.php');
+            $profiledata = (object) ['id' => $userid];
+            foreach ($customfields as $customfield) {
+                $profiledata->{'profile_field_' . $customfield['type']} = $customfield['value'];
+            }
+            profile_save_data($profiledata);
+        }
         $this->add_user_to_configured_cohorts($userid);
+        \core\event\user_created::create_from_userid($userid)->trigger();
         $transaction->allow_commit();
 
         return $DB->get_record('user', ['id' => $userid]);
@@ -420,14 +439,18 @@ class auth_plugin_userkey extends auth_plugin_base {
             !validate_email($userdata['email'])
         ) {
             throw new invalid_parameter_exception('Email address is invalid: ' . $userdata['email']);
-        } else if (
-            $emailchangerequested
-            &&
-            empty($CFG->allowaccountssameemail)
-            &&
-            $DB->record_exists('user', ['email' => $userdata['email'], 'mnethostid' => $CFG->mnet_localhost_id])
-        ) {
-            throw new invalid_parameter_exception('Email address already exists: ' . $userdata['email']);
+        } else if ($emailchangerequested && empty($CFG->allowaccountssameemail)) {
+            $select = $DB->sql_equal('email', ':email', false)
+                . ' AND mnethostid = :mnethostid AND id <> :userid';
+            if (
+                $DB->record_exists_select('user', $select, [
+                    'email' => $userdata['email'],
+                    'mnethostid' => $CFG->mnet_localhost_id,
+                    'userid' => $user->id,
+                ])
+            ) {
+                throw new invalid_parameter_exception('Email address already exists: ' . $userdata['email']);
+            }
         }
         $userdata['id'] = $user->id;
 
@@ -495,11 +518,7 @@ class auth_plugin_userkey extends auth_plugin_base {
         $user = reset($users);
 
         if (empty($user)) {
-            if ($this->should_create_user()) {
-                $user = $this->create_user($data);
-            } else {
-                throw new invalid_parameter_exception('User is not exist');
-            }
+            throw new invalid_parameter_exception('User is not exist');
         } else if (!\core_user::is_real_user($user->id) || empty($user->confirmed)) {
             throw new invalid_parameter_exception('User is not active');
         } else if (!empty($user->suspended) || $user->auth === 'nologin') {
@@ -557,6 +576,39 @@ class auth_plugin_userkey extends auth_plugin_base {
 
         $userdata = $this->validate_user_data($data);
         $userkey  = $this->generate_user_key($userdata);
+
+        return $CFG->wwwroot . '/auth/userkey/login.php?key=' . $userkey;
+    }
+
+    /**
+     * Create a new user and return a one-time login URL for that account.
+     *
+     * This is intentionally separate from get_login_url(), which only operates on existing users.
+     *
+     * @param array|stdClass $data New user profile data.
+     * @return string Login URL.
+     */
+    public function provision_user_login($data): string {
+        global $CFG, $DB;
+
+        if (!$this->should_create_user()) {
+            throw new invalid_parameter_exception(get_string('usercreationdisabled', 'auth_userkey'));
+        }
+
+        $userdata = (array) $data;
+        if ($this->is_ip_restriction_enabled()) {
+            if (empty($userdata['ip'])) {
+                throw new invalid_parameter_exception('Required parameter "ip" is not set.');
+            }
+            if (!\core\ip_utils::is_ip_address($userdata['ip'])) {
+                throw new invalid_parameter_exception('IP address is invalid.');
+            }
+        }
+
+        $transaction = $DB->start_delegated_transaction();
+        $user = $this->create_user($userdata);
+        $userkey = $this->userkeymanager->create_key($user->id, $this->get_allowed_ips($userdata));
+        $transaction->allow_commit();
 
         return $CFG->wwwroot . '/auth/userkey/login.php?key=' . $userkey;
     }
@@ -643,7 +695,7 @@ class auth_plugin_userkey extends auth_plugin_base {
         }
 
         $mappingfield = $this->get_mapping_field();
-        if ($this->should_create_user() || $this->should_update_user()) {
+        if ($this->should_update_user()) {
             $parameters['firstname'] = new external_value(PARAM_NOTAGS, 'The first name(s) of the user', VALUE_OPTIONAL);
             $parameters['lastname']  = new external_value(PARAM_NOTAGS, 'The family name of the user', VALUE_OPTIONAL);
 
@@ -665,6 +717,35 @@ class auth_plugin_userkey extends auth_plugin_base {
      */
     public function get_request_login_url_user_parameters() {
         $parameters = array_merge($this->get_mapping_parameter(), $this->get_user_fields_parameters());
+
+        return $parameters;
+    }
+
+    /**
+     * Return parameters for the combined user provisioning and login request.
+     *
+     * @return array
+     */
+    public function get_provision_user_login_parameters(): array {
+        $parameters = [
+            'username' => new external_value(PARAM_USERNAME, 'A valid and unique username'),
+            'email' => new external_value(PARAM_EMAIL, 'A valid and unique email address'),
+            'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user'),
+            'lastname' => new external_value(PARAM_NOTAGS, 'The family name of the user'),
+            'idnumber' => new external_value(PARAM_RAW_TRIMMED, 'An optional institution ID number', VALUE_OPTIONAL),
+            'customfields' => new external_multiple_structure(
+                new external_single_structure([
+                    'type' => new external_value(PARAM_ALPHANUMEXT, 'The short name of the custom profile field'),
+                    'value' => new external_value(PARAM_RAW, 'The value of the custom profile field'),
+                ]),
+                'Custom user profile fields',
+                VALUE_OPTIONAL
+            ),
+        ];
+
+        if ($this->is_ip_restriction_enabled()) {
+            $parameters['ip'] = new external_value(PARAM_RAW_TRIMMED, 'User IP address');
+        }
 
         return $parameters;
     }
