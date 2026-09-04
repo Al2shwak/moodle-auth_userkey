@@ -58,6 +58,8 @@ git archive \
     HEAD \
     -- . \
     ':(exclude).github' \
+    ':(exclude).DS_Store' \
+    ':(exclude)**/.DS_Store' \
     ':(exclude).gitignore' \
     ':(exclude).travis.yml' \
     ':(exclude)build-release.command'
