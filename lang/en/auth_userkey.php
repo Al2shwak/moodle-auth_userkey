@@ -33,6 +33,8 @@ $string['allowedredirecthosts_desc'] = 'External hosts that users may be redirec
     . 'Enter host names only, separated by semicolons, commas, or new lines. Leave empty to allow local Moodle URLs only.';
 $string['auth_userkeydescription'] = 'Log in to Moodle using one time user key.';
 $string['authmethodnotallowed'] = 'This account authentication method is not allowed for SSO.';
+$string['confirmationemailfailed'] = 'Your email address must be confirmed, but Moodle could not send the confirmation email.';
+$string['confirmationrequired'] = 'Your email address must be confirmed. Moodle has sent a new confirmation email.';
 $string['differentuserloggedin'] = 'A different user is already logged in. Log out before using this login link.';
 $string['emailauthdisabled'] = 'Email-based authentication is disabled.';
 $string['incorrectkeylifetime'] = 'User key lifetime must be a number.';

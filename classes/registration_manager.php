@@ -34,10 +34,10 @@ class registration_manager {
     public const MODE_MANUAL = 'manual';
 
     /** Per-user record of whether confirmation belongs to the user or an administrator. */
-    private const CONFIRMATION_PREFERENCE = 'auth_userkey_confirmationmethod';
+    public const CONFIRMATION_PREFERENCE = 'auth_userkey_confirmationmethod';
 
     /** Confirmation is completed through a link sent to the user. */
-    private const CONFIRMATION_EMAIL = 'email';
+    public const CONFIRMATION_EMAIL = 'email';
 
     /** Confirmation is completed by a Moodle administrator. */
     private const CONFIRMATION_ADMIN = 'admin';

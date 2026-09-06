@@ -39,7 +39,7 @@ $functions = [
     ],
     'auth_userkey_authenticate_user' => [
         'classname' => 'auth_userkey\\external\\authenticate_user',
-        'description' => 'Validate Moodle credentials without creating a browser session',
+        'description' => 'Validate credentials and resend confirmation for eligible pending accounts',
         'type' => 'write',
         'capabilities' => 'auth/userkey:authenticate',
     ],

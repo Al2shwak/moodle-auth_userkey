@@ -25,6 +25,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 use auth_userkey\core_userkey_manager;
+use auth_userkey\registration_manager;
 use auth_userkey\userkey_manager_interface;
 use core_external\external_value;
 
@@ -461,10 +462,20 @@ class auth_plugin_userkey extends auth_plugin_base {
             || !$this->is_auth_method_allowed($user->auth)
             || !\core_user::is_real_user($user->id)
             || !empty($user->deleted)
-            || empty($user->confirmed)
             || !empty($user->suspended)
             || is_siteadmin($user)
         ) {
+            throw new moodle_exception('invalidauthentication', 'auth_userkey');
+        }
+
+        $awaitingemailconfirmation = empty($user->confirmed)
+            && in_array($user->auth, ['email', 'manual'], true)
+            && get_user_preferences(
+                registration_manager::CONFIRMATION_PREFERENCE,
+                registration_manager::CONFIRMATION_EMAIL,
+                $user
+            ) === registration_manager::CONFIRMATION_EMAIL;
+        if (empty($user->confirmed) && !$awaitingemailconfirmation) {
             throw new moodle_exception('invalidauthentication', 'auth_userkey');
         }
 
@@ -472,9 +483,9 @@ class auth_plugin_userkey extends auth_plugin_base {
         $authenticated = authenticate_user_login($user->username, $password, false, $failurereason);
         if (
             !$authenticated
+            || (int) $authenticated->id !== (int) $user->id
             || !\core_user::is_real_user($authenticated->id)
             || !empty($authenticated->deleted)
-            || empty($authenticated->confirmed)
             || !empty($authenticated->suspended)
             || !$this->is_auth_method_allowed($authenticated->auth)
             || is_siteadmin($authenticated)
@@ -482,10 +493,32 @@ class auth_plugin_userkey extends auth_plugin_base {
             throw new moodle_exception('invalidauthentication', 'auth_userkey');
         }
 
+        if (empty($authenticated->confirmed)) {
+            if (!$awaitingemailconfirmation) {
+                throw new moodle_exception('invalidauthentication', 'auth_userkey');
+            }
+            if (!$this->resend_confirmation_email($authenticated)) {
+                throw new moodle_exception('confirmationemailfailed', 'auth_userkey');
+            }
+            throw new moodle_exception('confirmationrequired', 'auth_userkey');
+        }
+
         return [
             'userid' => (int) $authenticated->id,
             'username' => $authenticated->username,
         ];
+    }
+
+    /**
+     * Send Moodle's standard confirmation email with this plugin's confirmation endpoint.
+     *
+     * Kept as a method so delivery failures can be tested without attempting real email delivery.
+     *
+     * @param \stdClass $user Authenticated, unconfirmed user.
+     * @return bool Whether Moodle accepted the email for delivery.
+     */
+    protected function resend_confirmation_email(\stdClass $user): bool {
+        return send_confirmation_email($user, new moodle_url('/auth/userkey/confirm.php'));
     }
 
     /**

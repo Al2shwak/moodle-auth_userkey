@@ -19,8 +19,9 @@ Supported Moodle versions: **4.5 through 5.2**.
   Both credential validation and login-link generation enforce the configured authentication-method allowlist.
 - One-time login links are issued only by immutable Moodle user ID. The request cannot create or edit a user or
   change an authentication method.
-- Guests, deleted, suspended, unconfirmed, `nologin`, and site-administrator accounts cannot authenticate or
-  receive UserKey links.
+- Guests, deleted, suspended, unconfirmed, `nologin`, and site-administrator accounts cannot receive UserKey links.
+  A correct password for a user-confirmed pending account resends Moodle's confirmation email without creating a
+  login session.
 - WordPress must keep the Moodle token server-side and use HTTPS for every request.
 
 Registration and payment are independent. WordPress may begin checkout immediately with the returned `userid`,
@@ -179,6 +180,22 @@ selected in the plugin allowlist. Every invalid password, unknown user, or ineli
   "username": "student@example.com"
 }
 ```
+
+If the credentials are correct but the account is still awaiting user email confirmation, Moodle calls its standard
+`send_confirmation_email()` function with this plugin's confirmation endpoint and returns an exception containing:
+
+```json
+{
+  "errorcode": "confirmationrequired",
+  "message": "Your email address must be confirmed. Moodle has sent a new confirmation email."
+}
+```
+
+WordPress should redirect this outcome to its confirmation-instructions page. It must not create a session, request
+a UserKey login URL, or continue payment/access routing. If Moodle could not accept the email for delivery, the error
+code is `confirmationemailfailed`; WordPress should show a safe retry or support message. Administrator-confirmed
+accounts never trigger email and retain the generic invalid-login response. Apply WordPress login rate limits to
+prevent repeated valid-password submissions from sending excessive confirmation messages.
 
 ### Request a password reset
 

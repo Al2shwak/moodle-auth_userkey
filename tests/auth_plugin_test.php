@@ -233,6 +233,128 @@ final class auth_plugin_test extends advanced_testcase {
     }
 
     /**
+     * A correct password resends Moodle's confirmation email for user-confirmed registration modes.
+     */
+    public function test_authenticate_unconfirmed_user_resends_confirmation_email(): void {
+        $olderrorlevel = error_reporting();
+        error_reporting($olderrorlevel & ~E_DEPRECATED);
+        $sink = $this->redirectEmails();
+        $manager = new registration_manager();
+        $modes = [registration_manager::MODE_EMAIL, registration_manager::MODE_MANUAL];
+
+        try {
+            foreach ($modes as $index => $mode) {
+                set_config('registrationmode', $mode, 'auth_userkey');
+                $result = $manager->register_user([
+                    'email' => 'pending' . $index . '@example.com',
+                    'password' => 'Password1!',
+                    'firstname' => 'Pending',
+                    'lastname' => 'User',
+                ]);
+
+                try {
+                    $this->auth->authenticate_user($result['username'], 'Password1!');
+                    $this->fail('Expected an unconfirmed account to require confirmation.');
+                } catch (moodle_exception $exception) {
+                    $this->assertSame('confirmationrequired', $exception->errorcode);
+                }
+            }
+
+            $this->assertCount(4, $sink->get_messages());
+            foreach ($sink->get_messages() as $message) {
+                $this->assertStringContainsString('/auth/userkey/confirm.php?data=', $message->body);
+            }
+        } finally {
+            $sink->close();
+            error_reporting($olderrorlevel);
+        }
+    }
+
+    /**
+     * An incorrect password never triggers another confirmation email.
+     */
+    public function test_authenticate_unconfirmed_user_requires_valid_password_before_resend(): void {
+        $sink = $this->redirectEmails();
+        $manager = new registration_manager();
+        $result = $manager->register_user([
+            'email' => 'pendingwrongpassword@example.com',
+            'password' => 'Password1!',
+            'firstname' => 'Pending',
+            'lastname' => 'Password',
+        ]);
+
+        try {
+            $this->auth->authenticate_user($result['username'], 'WrongPassword1!');
+            $this->fail('Expected invalid credentials to be rejected.');
+        } catch (moodle_exception $exception) {
+            $this->assertSame('invalidauthentication', $exception->errorcode);
+        }
+
+        $this->assertCount(1, $sink->get_messages());
+        $sink->close();
+    }
+
+    /**
+     * Administrator-confirmed accounts never receive an email from the login flow.
+     */
+    public function test_authenticate_does_not_resend_for_admin_confirmation(): void {
+        set_config('registrationmode', registration_manager::MODE_EMAIL_ADMIN, 'auth_userkey');
+        $sink = $this->redirectEmails();
+        $manager = new registration_manager();
+        $result = $manager->register_user([
+            'email' => 'pendingadmin@example.com',
+            'password' => 'Password1!',
+            'firstname' => 'Pending',
+            'lastname' => 'Admin',
+        ]);
+
+        try {
+            $this->auth->authenticate_user($result['username'], 'Password1!');
+            $this->fail('Expected administrator confirmation to remain pending.');
+        } catch (moodle_exception $exception) {
+            $this->assertSame('invalidauthentication', $exception->errorcode);
+        }
+
+        $this->assertCount(0, $sink->get_messages());
+        $sink->close();
+    }
+
+    /**
+     * A mail delivery failure is distinguishable after successful credential validation.
+     */
+    public function test_authenticate_reports_confirmation_email_failure(): void {
+        $sink = $this->redirectEmails();
+        $manager = new registration_manager();
+        $result = $manager->register_user([
+            'email' => 'pendingmailfailure@example.com',
+            'password' => 'Password1!',
+            'firstname' => 'Pending',
+            'lastname' => 'Failure',
+        ]);
+        $this->auth = new class extends auth_plugin_userkey {
+            /**
+             * Simulate an email transport failure.
+             *
+             * @param \stdClass $user Unconfirmed user.
+             * @return bool
+             */
+            protected function resend_confirmation_email(\stdClass $user): bool {
+                return false;
+            }
+        };
+
+        try {
+            $this->auth->authenticate_user($result['username'], 'Password1!');
+            $this->fail('Expected confirmation email delivery to fail.');
+        } catch (moodle_exception $exception) {
+            $this->assertSame('confirmationemailfailed', $exception->errorcode);
+        }
+
+        $this->assertCount(1, $sink->get_messages());
+        $sink->close();
+    }
+
+    /**
      * The bridge honours Moodle's account lockout state.
      */
     public function test_authenticate_honours_lockout(): void {
@@ -295,7 +417,6 @@ final class auth_plugin_test extends advanced_testcase {
     public function test_authenticate_rejects_with_generic_error(): void {
         $cases = [
             'wrong password' => [[], 'WrongPassword1!', false],
-            'unconfirmed' => [['confirmed' => 0], 'Password1!', false],
             'suspended' => [['suspended' => 1], 'Password1!', false],
             'nologin' => [['auth' => 'nologin'], 'Password1!', false],
             'administrator' => [[], 'Password1!', true],

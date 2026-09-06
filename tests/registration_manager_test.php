@@ -157,9 +157,9 @@ final class registration_manager_test extends advanced_testcase {
 
         try {
             $auth->authenticate_user($user->username, 'Password1!');
-            $this->fail('Expected the unconfirmed account to be rejected.');
+            $this->fail('Expected the unconfirmed account to require confirmation.');
         } catch (moodle_exception $exception) {
-            $this->assertSame('invalidauthentication', $exception->errorcode);
+            $this->assertSame('confirmationrequired', $exception->errorcode);
         }
 
         $this->assertTrue($this->manager->confirm_user($user->secret . '/' . $user->username));
