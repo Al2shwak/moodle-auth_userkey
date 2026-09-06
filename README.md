@@ -57,6 +57,8 @@ Create a system role with no archetype and grant only:
 - `auth/userkey:generatekey`
 - `moodle/cohort:view`
 - `moodle/cohort:assign`
+- `moodle/user:viewdetails`
+- `moodle/course:useremail`
 - the REST protocol capability required by your Moodle configuration
 
 Assign the role to the service user in the system context. The plugin capabilities intentionally have no default
@@ -71,6 +73,7 @@ The service contains:
 | `auth_userkey_authenticate_user` | Validate Moodle credentials and return immutable identity |
 | `auth_userkey_request_password_reset` | Ask Moodle to send its native password-reset email |
 | `auth_userkey_request_login_url` | Create a one-time browser SSO URL for a Moodle user ID |
+| `core_user_get_users_by_field` | Retrieve a returning user's permitted Moodle profile fields by immutable ID |
 | `core_cohort_get_cohorts` | List cohorts visible to the service account |
 | `core_cohort_add_cohort_members` | Activate paid cohort access |
 | `core_cohort_delete_cohort_members` | Revoke paid cohort access |
@@ -86,6 +89,22 @@ https://moodle.example.com/webservice/rest/server.php
 
 Include `wstoken=SERVER_SIDE_TOKEN`, `moodlewsrestformat=json`, and the relevant `wsfunction` in every request.
 The examples below show form-encoded field names; JSON response bodies are shown beneath them.
+
+### Retrieve a returning user's profile
+
+Call this only with a Moodle user ID returned by successful authentication or held in a protected server-side
+session. Never accept the ID from an unsigned browser request.
+
+```text
+wsfunction=core_user_get_users_by_field
+field=id
+values[0]=123
+```
+
+Moodle returns an array of matching profiles. WordPress must require exactly one result whose `id` equals the
+requested ID. Profile fields are filtered by Moodle permissions, so it must also require `email`, `firstname`, and
+`lastname` before continuing. The core response may include additional fields and does not include a `deleted`
+field; do not treat the absence of `deleted` as an account-status assertion.
 
 ### Discover registration fields
 

@@ -64,6 +64,7 @@ final class externallib_test extends advanced_testcase {
             'auth_userkey_authenticate_user',
             'auth_userkey_request_password_reset',
             'auth_userkey_request_login_url',
+            'core_user_get_users_by_field',
             'core_cohort_get_cohorts',
             'core_cohort_add_cohort_members',
             'core_cohort_delete_cohort_members',
