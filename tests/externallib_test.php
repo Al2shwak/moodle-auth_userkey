@@ -18,16 +18,15 @@ namespace auth_userkey;
 
 use advanced_testcase;
 use auth_userkey\external\request_login_url;
+use context_system;
 use core_external\external_api;
 use invalid_parameter_exception;
 use moodle_exception;
 use PHPUnit\Framework\Attributes\CoversClass;
 use required_capability_exception;
-use context_system;
+
 /**
- * Tests for the request login URL external function.
- *
- * @covers \auth_userkey\external\request_login_url
+ * Tests for the login URL service contract.
  *
  * @package    auth_userkey
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
@@ -36,16 +35,20 @@ use context_system;
 #[CoversClass(request_login_url::class)]
 final class externallib_test extends advanced_testcase {
     /**
-     * User object.
-     *
-     * @var $user.
+     * Enable the plugin and reset database state.
      */
-    protected $user = [];
+    protected function setUp(): void {
+        global $CFG;
+
+        parent::setUp();
+        $this->resetAfterTest();
+        $CFG->auth = 'manual,email,userkey';
+    }
 
     /**
-     * Test that the bundled restricted service has the shortname required by the token endpoint.
+     * The prebuilt service must contain the complete one-token integration contract.
      */
-    public function test_service_declaration_has_shortname(): void {
+    public function test_service_declaration_is_complete(): void {
         global $CFG;
 
         $functions = [];
@@ -56,301 +59,106 @@ final class externallib_test extends advanced_testcase {
         $this->assertSame('auth_userkey', $service['shortname']);
         $this->assertSame(1, $service['restrictedusers']);
         $this->assertSame([
+            'auth_userkey_get_registration_fields',
+            'auth_userkey_register_user',
+            'auth_userkey_authenticate_user',
+            'auth_userkey_request_password_reset',
             'auth_userkey_request_login_url',
-            'auth_userkey_provision_user_login',
+            'core_cohort_add_cohort_members',
+            'core_cohort_delete_cohort_members',
             'core_webservice_get_site_info',
         ], $service['functions']);
     }
 
     /**
-     * Initial set up.
+     * A fixed Moodle user ID produces a one-time URL.
      */
-    public function setUp(): void {
-        parent::setUp();
+    public function test_request_login_url_uses_fixed_user_id(): void {
+        global $CFG, $DB;
 
-        $this->resetAfterTest();
+        $this->setAdminUser();
+        $user = self::getDataGenerator()->create_user([
+            'username' => 'unchanged',
+            'email' => 'unchanged@example.com',
+            'auth' => 'manual',
+        ]);
 
-        $user = [];
-        $user['username'] = 'username';
-        $user['email'] = 'exists@test.com';
-        $user['idnumber'] = 'idnumber';
-        $this->user = self::getDataGenerator()->create_user($user);
+        $result = request_login_url::execute(['id' => $user->id]);
+        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
+
+        $key = $DB->get_record('user_private_key', ['userid' => $user->id], '*', MUST_EXIST);
+        $this->assertSame($CFG->wwwroot . '/auth/userkey/login.php?key=' . $key->value, $result['loginurl']);
+        $stored = $DB->get_record('user', ['id' => $user->id], '*', MUST_EXIST);
+        $this->assertSame('unchanged', $stored->username);
+        $this->assertSame('unchanged@example.com', $stored->email);
+        $this->assertSame('manual', $stored->auth);
     }
 
     /**
-     * Test call with incorrect required parameter.
+     * Mutable identity fields are not part of the endpoint schema.
      */
-    public function test_throwing_plugin_disabled_exception(): void {
+    public function test_request_login_url_rejects_mutable_identity_fields(): void {
         $this->setAdminUser();
-
-        $params = [
-            'bla' => 'exists@test.com',
-        ];
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('The userkey authentication plugin is disabled.');
-
-        // Simulate the web service server.
-        $result = request_login_url::execute($params);
-        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
-    }
-
-    /**
-     * Test successful web service calls.
-     */
-    public function test_successful_webservice_calls(): void {
-        global $DB, $CFG;
-
-        $CFG->auth = "userkey";
-        $this->setAdminUser();
-
-        // Email.
-        $params = [
-            'email' => 'exists@test.com',
-        ];
-
-        // Simulate the web service server.
-        $result = request_login_url::execute($params);
-        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
-
-        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
-        $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
-
-        $this->assertTrue(is_array($result));
-        $this->assertTrue(key_exists('loginurl', $result));
-        $this->assertEquals($expectedurl, $result['loginurl']);
-
-        // Username.
-        set_config('mappingfield', 'username', 'auth_userkey');
-        $params = [
-            'username' => 'username',
-        ];
-
-        // Simulate the web service server.
-        $result = request_login_url::execute($params);
-        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
-
-        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
-        $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
-
-        $this->assertTrue(is_array($result));
-        $this->assertTrue(key_exists('loginurl', $result));
-        $this->assertEquals($expectedurl, $result['loginurl']);
-
-        // Idnumber.
-        set_config('mappingfield', 'idnumber', 'auth_userkey');
-        $params = [
-            'idnumber' => 'idnumber',
-        ];
-
-        // Simulate the web service server.
-        $result = request_login_url::execute($params);
-        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
-
-        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
-        $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
-
-        $this->assertTrue(is_array($result));
-        $this->assertTrue(key_exists('loginurl', $result));
-        $this->assertEquals($expectedurl, $result['loginurl']);
-
-        // Database Id.
-        set_config('mappingfield', 'id', 'auth_userkey');
-        $params = [
-            'id' => $this->user->id,
-        ];
-
-        // Simulate the web service server.
-        $result = request_login_url::execute($params);
-        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
-
-        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
-        $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
-
-        $this->assertTrue(is_array($result));
-        $this->assertTrue(key_exists('loginurl', $result));
-        $this->assertEquals($expectedurl, $result['loginurl']);
-
-        // IP restriction.
-        set_config('iprestriction', true, 'auth_userkey');
-        set_config('mappingfield', 'idnumber', 'auth_userkey');
-        $params = [
-            'idnumber' => 'idnumber',
-            'ip' => '192.168.1.1',
-        ];
-
-        // Simulate the web service server.
-        $result = request_login_url::execute($params);
-        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
-
-        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
-        $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
-
-        $this->assertTrue(is_array($result));
-        $this->assertTrue(key_exists('loginurl', $result));
-        $this->assertEquals($expectedurl, $result['loginurl']);
-    }
-
-    /**
-     * Test call with missing email required parameter.
-     */
-    public function test_exception_thrown_if_required_parameter_email_is_not_set(): void {
-        global $CFG;
-
-        $this->setAdminUser();
-        $CFG->auth = "userkey";
-
-        $params = [
-            'bla' => 'exists@test.com',
-        ];
+        $user = self::getDataGenerator()->create_user();
 
         $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Missing required key in single structure: email');
-
-        request_login_url::execute($params);
-    }
-
-    /**
-     * Test call with missing ip required parameter.
-     */
-    public function test_exception_thrown_if_required_parameter_op_is_not_set(): void {
-        global $CFG;
-
-        $this->setAdminUser();
-        $CFG->auth = "userkey";
-
-        set_config('iprestriction', true, 'auth_userkey');
-
-        $params = [
-            'email' => 'exists@test.com',
-        ];
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Missing required key in single structure: ip');
-
-        request_login_url::execute($params);
-    }
-
-    /**
-     * Test that IP restriction rejects a hostname instead of silently treating it as an IP address.
-     */
-    public function test_exception_thrown_if_ip_is_not_an_address(): void {
-        global $CFG;
-
-        $this->setAdminUser();
-        $CFG->auth = 'userkey';
-        set_config('iprestriction', true, 'auth_userkey');
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (IP address is invalid.)');
-
         request_login_url::execute([
-            'email' => 'exists@test.com',
-            'ip' => 'example.com',
+            'id' => $user->id,
+            'email' => 'attacker@example.com',
         ]);
     }
 
     /**
-     * Test request for a user who is not exist.
+     * IP restriction makes the browser IP mandatory.
      */
-    public function test_request_not_existing_user(): void {
-        global $CFG;
-
+    public function test_request_login_url_requires_valid_ip_when_enabled(): void {
         $this->setAdminUser();
-        $CFG->auth = "userkey";
-
-        $params = [
-            'email' => 'notexists@test.com',
-        ];
+        $user = self::getDataGenerator()->create_user();
+        set_config('iprestriction', true, 'auth_userkey');
 
         $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (User is not exist)');
-
-        // Simulate the web service server.
-        $result = request_login_url::execute($params);
-        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
+        request_login_url::execute(['id' => $user->id]);
     }
 
     /**
-     * Test that a login URL is not generated for a suspended user.
+     * The external function enforces its dedicated capability.
      */
-    public function test_request_suspended_user(): void {
-        global $CFG, $DB;
-
-        $this->setAdminUser();
-        $CFG->auth = 'userkey';
-        $DB->set_field('user', 'suspended', 1, ['id' => $this->user->id]);
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (User is suspended)');
-
-        request_login_url::execute(['email' => 'exists@test.com']);
-    }
-
-    /**
-     * Test that a login URL is not generated for an unconfirmed user.
-     */
-    public function test_request_unconfirmed_user(): void {
-        global $CFG, $DB;
-
-        $this->setAdminUser();
-        $CFG->auth = 'userkey';
-        $DB->set_field('user', 'confirmed', 0, ['id' => $this->user->id]);
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (User is not active)');
-
-        request_login_url::execute(['email' => 'exists@test.com']);
-    }
-
-    /**
-     * Test that permission exception gets thrown if user doesn't have required permissions.
-     */
-    public function test_throwing_of_permission_exception(): void {
-        global $CFG;
-
-        $this->setUser($this->user);
-        $CFG->auth = "userkey";
-
-        $params = [
-            'email' => 'notexists@test.com',
-        ];
+    public function test_request_login_url_requires_capability(): void {
+        $caller = self::getDataGenerator()->create_user();
+        $target = self::getDataGenerator()->create_user();
+        $this->setUser($caller);
 
         $this->expectException(required_capability_exception::class);
-        $this->expectExceptionMessage('Sorry, but you do not currently have permissions to do that (Generate login user key)');
-
-        // Simulate the web service server.
-        $result = request_login_url::execute($params);
-        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
+        request_login_url::execute(['id' => $target->id]);
     }
 
     /**
-     * Test request gets executed correctly if use has required permissions.
+     * The external function is available to an explicitly granted service role.
      */
-    public function test_request_gets_executed_if_user_has_permission(): void {
-        global $CFG, $DB;
+    public function test_request_login_url_accepts_explicit_capability(): void {
+        $caller = self::getDataGenerator()->create_user();
+        $target = self::getDataGenerator()->create_user();
+        $roleid = self::getDataGenerator()->create_role();
+        assign_capability('auth/userkey:generatekey', CAP_ALLOW, $roleid, context_system::instance());
+        role_assign($roleid, $caller->id, context_system::instance());
+        accesslib_clear_all_caches_for_unit_testing();
+        $this->setUser($caller);
 
-        $this->setUser($this->user);
-        $CFG->auth = "userkey";
+        $result = request_login_url::execute(['id' => $target->id]);
+        $this->assertArrayHasKey('loginurl', $result);
+    }
 
-        $context = context_system::instance();
-        $studentrole = $DB->get_record('role', ['shortname' => 'student'], '*', MUST_EXIST);
-        assign_capability('auth/userkey:generatekey', CAP_ALLOW, $studentrole->id, $context->id);
-        role_assign($studentrole->id, $this->user->id, $context->id);
+    /**
+     * Disabled plugins reject service requests.
+     */
+    public function test_disabled_plugin_is_rejected(): void {
+        global $CFG;
 
-        $params = [
-            'email' => 'exists@test.com',
-        ];
+        $CFG->auth = 'manual,email';
+        $this->setAdminUser();
 
-        // Simulate the web service server.
-        $result = request_login_url::execute($params);
-        $result = external_api::clean_returnvalue(request_login_url::execute_returns(), $result);
-
-        $actualkey = $DB->get_record('user_private_key', ['userid' => $this->user->id]);
-        $expectedurl = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
-
-        $this->assertTrue(is_array($result));
-        $this->assertTrue(key_exists('loginurl', $result));
-        $this->assertEquals($expectedurl, $result['loginurl']);
+        $this->expectException(moodle_exception::class);
+        $this->expectExceptionMessage('The userkey authentication plugin is disabled.');
+        request_login_url::execute(['id' => 123]);
     }
 }

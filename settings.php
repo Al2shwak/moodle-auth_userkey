@@ -24,18 +24,28 @@
 
 defined('MOODLE_INTERNAL') || die;
 
-require_once($CFG->dirroot . '/cohort/lib.php');
-
 if ($ADMIN->fulltree) {
     $yesno = [get_string('no'), get_string('yes')];
-    $fields = get_auth_plugin('userkey')->get_allowed_mapping_fields();
+    $authmethods = get_auth_plugin('userkey')->get_selectable_auth_methods();
 
     $settings->add(new admin_setting_configselect(
-        'auth_userkey/mappingfield',
-        new lang_string('mappingfield', 'auth_userkey'),
-        new lang_string('mappingfield_desc', 'auth_userkey'),
-        auth_plugin_userkey::DEFAULT_MAPPING_FIELD,
-        $fields
+        'auth_userkey/registrationmode',
+        get_string('registrationmode', 'auth_userkey'),
+        get_string('registrationmode_desc', 'auth_userkey'),
+        'email',
+        [
+            'email' => get_string('registrationmode_email', 'auth_userkey'),
+            'emailadmin' => get_string('registrationmode_emailadmin', 'auth_userkey'),
+            'manual' => get_string('registrationmode_manual', 'auth_userkey'),
+        ]
+    ));
+
+    $settings->add(new admin_setting_configmultiselect(
+        'auth_userkey/allowedauthmethods',
+        get_string('allowedauthmethods', 'auth_userkey'),
+        get_string('allowedauthmethods_desc', 'auth_userkey'),
+        ['manual', 'email'],
+        $authmethods
     ));
 
     $settings->add(new admin_setting_configtext(
@@ -85,51 +95,4 @@ if ($ADMIN->fulltree) {
         '',
         PARAM_URL
     ));
-
-    $settings->add(new admin_setting_configselect(
-        'auth_userkey/createuser',
-        new lang_string('createuser', 'auth_userkey'),
-        new lang_string('createuser_desc', 'auth_userkey'),
-        0,
-        $yesno
-    ));
-
-    $cohortchoices = [];
-    $cohorts = cohort_get_all_cohorts(0, 0);
-    foreach ($cohorts['cohorts'] as $cohort) {
-        $cohortname = format_string($cohort->name, true, [
-            'context' => context::instance_by_id($cohort->contextid),
-        ]);
-        $cohortchoices[$cohort->id] = get_string('createusercohortoption', 'auth_userkey', [
-            'name' => $cohortname,
-            'id' => $cohort->id,
-        ]);
-    }
-
-    $settings->add(new admin_setting_configmultiselect(
-        'auth_userkey/createusercohorts',
-        new lang_string('createusercohorts', 'auth_userkey'),
-        new lang_string('createusercohorts_desc', 'auth_userkey'),
-        [],
-        $cohortchoices
-    ));
-
-    $settings->add(new admin_setting_configselect(
-        'auth_userkey/updateuser',
-        new lang_string('updateuser', 'auth_userkey'),
-        new lang_string('updateuser_desc', 'auth_userkey'),
-        0,
-        $yesno
-    ));
-
-    // Display locking / mapping of profile fields.
-    $authplugin = get_auth_plugin('userkey');
-    display_auth_lock_options(
-        $settings,
-        $authplugin->authtype,
-        $authplugin->userfields,
-        get_string('auth_fieldlocks_help', 'auth'),
-        false,
-        false
-    );
 }

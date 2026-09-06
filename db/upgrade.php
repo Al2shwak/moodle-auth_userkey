@@ -29,12 +29,35 @@
  * @return bool
  */
 function xmldb_auth_userkey_upgrade($oldversion) {
-    global $DB;
+    if ($oldversion < 2026090402) {
+        // Remove settings belonging to the retired create/update provisioning flow.
+        unset_config('mappingfield', 'auth_userkey');
+        unset_config('createuser', 'auth_userkey');
+        unset_config('createusercohorts', 'auth_userkey');
+        unset_config('updateuser', 'auth_userkey');
+        foreach ((array) get_config('auth_userkey') as $name => $value) {
+            if (str_starts_with($name, 'field_lock_')) {
+                unset_config($name, 'auth_userkey');
+            }
+        }
 
-    if ($oldversion < 2018050200) {
-        // Confirm all previously created users.
-        $DB->execute("UPDATE {user} SET confirmed=? WHERE auth=?", [1, 'userkey']);
-        upgrade_plugin_savepoint(true, 2018050200, 'auth', 'userkey');
+        upgrade_plugin_savepoint(true, 2026090402, 'auth', 'userkey');
+    }
+
+    if ($oldversion < 2026090500) {
+        if (get_config('auth_userkey', 'allowedauthmethods') === false) {
+            set_config('allowedauthmethods', 'manual,email', 'auth_userkey');
+        }
+
+        upgrade_plugin_savepoint(true, 2026090500, 'auth', 'userkey');
+    }
+
+    if ($oldversion < 2026090600) {
+        if (get_config('auth_userkey', 'registrationmode') === false) {
+            set_config('registrationmode', 'email', 'auth_userkey');
+        }
+
+        upgrade_plugin_savepoint(true, 2026090600, 'auth', 'userkey');
     }
 
     return true;

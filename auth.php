@@ -26,8 +26,6 @@ defined('MOODLE_INTERNAL') || die();
 
 use auth_userkey\core_userkey_manager;
 use auth_userkey\userkey_manager_interface;
-use core_external\external_multiple_structure;
-use core_external\external_single_structure;
 use core_external\external_value;
 
 require_once($CFG->libdir . '/authlib.php');
@@ -37,11 +35,6 @@ require_once($CFG->dirroot . '/user/lib.php');
  * User key authentication plugin.
  */
 class auth_plugin_userkey extends auth_plugin_base {
-    /**
-     * Default mapping field.
-     */
-    const DEFAULT_MAPPING_FIELD = 'email';
-
     /**
      * User key manager.
      *
@@ -55,16 +48,14 @@ class auth_plugin_userkey extends auth_plugin_base {
      * @var array
      */
     protected $defaults = [
-        'mappingfield' => self::DEFAULT_MAPPING_FIELD,
         'keylifetime' => 60,
         'iprestriction' => 0,
         'ipwhitelist' => '',
+        'allowedauthmethods' => 'manual,email',
+        'registrationmode' => 'email',
         'redirecturl' => '',
         'allowedredirecthosts' => '',
         'ssourl' => '',
-        'createuser' => false,
-        'createusercohorts' => '',
-        'updateuser' => false,
     ];
 
     /**
@@ -177,7 +168,11 @@ class auth_plugin_userkey extends auth_plugin_base {
             throw new moodle_exception('siteadminnotallowed', 'auth_userkey');
         }
 
-        if (empty($user->confirmed) || !empty($user->suspended) || $user->auth === 'nologin') {
+        if (
+                empty($user->confirmed)
+                || !empty($user->suspended)
+                || !$this->is_auth_method_allowed($user->auth)
+        ) {
             $reason = empty($user->confirmed) ? AUTH_LOGIN_UNAUTHORISED : AUTH_LOGIN_SUSPENDED;
             \core\event\user_login_failed::create([
                 'userid' => $user->id,
@@ -236,42 +231,64 @@ class auth_plugin_userkey extends auth_plugin_base {
     }
 
     /**
-     * Return mapping field to find a lms user.
+     * Return enabled authentication methods that implement password authentication.
      *
-     * @return string
+     * Authentication methods that must never be bridged are excluded even when enabled.
+     *
+     * @return array Method name to display name.
      */
-    public function get_mapping_field() {
-        if (isset($this->config->mappingfield) && !empty($this->config->mappingfield)) {
-            return $this->config->mappingfield;
+    public function get_selectable_auth_methods(): array {
+        $blockedmethods = ['userkey', 'nologin', 'webservice', 'none'];
+        $methods = [];
+
+        foreach (get_enabled_auth_plugins() as $method) {
+            if (in_array($method, $blockedmethods, true)) {
+                continue;
+            }
+
+            $authplugin = get_auth_plugin($method);
+            $loginmethod = new \ReflectionMethod($authplugin, 'user_login');
+            if ($loginmethod->getDeclaringClass()->getName() === auth_plugin_base::class) {
+                continue;
+            }
+
+            $methods[$method] = $authplugin->get_title();
         }
 
-        return self::DEFAULT_MAPPING_FIELD;
+        return $methods;
     }
 
     /**
-     * Check if we need to create a new user.
+     * Return the configured authentication allowlist, restricted to selectable enabled methods.
      *
-     * @return bool
+     * @return array Authentication method names.
      */
-    protected function should_create_user() {
-        if (isset($this->config->createuser) && $this->config->createuser == true) {
-            return true;
+    public function get_allowed_auth_methods(): array {
+        if (!property_exists($this->config, 'allowedauthmethods')) {
+            $configured = explode(',', $this->defaults['allowedauthmethods']);
+        } else if (is_array($this->config->allowedauthmethods)) {
+            $configured = $this->config->allowedauthmethods;
+        } else if ($this->config->allowedauthmethods === '') {
+            $configured = [];
+        } else {
+            $configured = explode(',', $this->config->allowedauthmethods);
         }
 
-        return false;
+        $configured = array_unique(array_filter(array_map(static function ($method) {
+            return clean_param(trim((string) $method), PARAM_PLUGIN);
+        }, $configured)));
+
+        return array_values(array_intersect($configured, array_keys($this->get_selectable_auth_methods())));
     }
 
     /**
-     * Check if we need to update users.
+     * Check whether an account authentication method may use this bridge.
      *
+     * @param string $method Authentication method name.
      * @return bool
      */
-    protected function should_update_user() {
-        if (isset($this->config->updateuser) && $this->config->updateuser == true) {
-            return true;
-        }
-
-        return false;
+    protected function is_auth_method_allowed(string $method): bool {
+        return in_array($method, $this->get_allowed_auth_methods(), true);
     }
 
     /**
@@ -288,178 +305,6 @@ class auth_plugin_userkey extends auth_plugin_base {
     }
 
     /**
-     * Create a new user.
-     *
-     * @param array $data Validated user data from web service.
-     *
-     * @return object User object.
-     */
-    protected function create_user(array $data) {
-        global $DB, $CFG;
-
-        $user = $data;
-        unset($user['ip']);
-        $customfields = $user['customfields'] ?? [];
-        unset($user['customfields']);
-        $user['auth'] = 'userkey';
-        $user['confirmed'] = 1;
-        $user['mnethostid'] = $CFG->mnet_localhost_id;
-
-        $requiredfieds = ['username', 'email', 'firstname', 'lastname'];
-        $missingfields = [];
-        foreach ($requiredfieds as $requiredfied) {
-            if (empty($user[$requiredfied])) {
-                $missingfields[] = $requiredfied;
-            }
-        }
-        if (!empty($missingfields)) {
-            throw new invalid_parameter_exception('Unable to create user, missing value(s): ' . implode(',', $missingfields));
-        }
-
-        if ($DB->record_exists('user', ['username' => $user['username'], 'mnethostid' => $CFG->mnet_localhost_id])) {
-            throw new invalid_parameter_exception('Username already exists: ' . $user['username']);
-        }
-        if (!validate_email($user['email'])) {
-            throw new invalid_parameter_exception('Email address is invalid: ' . $user['email']);
-        } else if (empty($CFG->allowaccountssameemail)) {
-            $select = $DB->sql_equal('email', ':email', false) . ' AND mnethostid = :mnethostid';
-            if (
-                $DB->record_exists_select('user', $select, [
-                    'email' => $user['email'],
-                    'mnethostid' => $user['mnethostid'],
-                ])
-            ) {
-                throw new invalid_parameter_exception('Email address already exists: ' . $user['email']);
-            }
-        }
-
-        $transaction = $DB->start_delegated_transaction();
-        // Delay the event until profile fields and cohort memberships are part of the completed account.
-        $userid = user_create_user($user, true, false);
-        if (!empty($customfields)) {
-            require_once($CFG->dirroot . '/user/profile/lib.php');
-            $profiledata = (object) ['id' => $userid];
-            foreach ($customfields as $customfield) {
-                $profiledata->{'profile_field_' . $customfield['type']} = $customfield['value'];
-            }
-            profile_save_data($profiledata);
-        }
-        $this->add_user_to_configured_cohorts($userid);
-        \core\event\user_created::create_from_userid($userid)->trigger();
-        $transaction->allow_commit();
-
-        return $DB->get_record('user', ['id' => $userid]);
-    }
-
-    /**
-     * Add a newly created user to the cohorts selected in the plugin settings.
-     *
-     * Cohorts which have been deleted since the setting was saved are ignored.
-     *
-     * @param int $userid User ID.
-     */
-    protected function add_user_to_configured_cohorts(int $userid): void {
-        global $CFG, $DB;
-
-        $cohortids = $this->get_configured_cohort_ids();
-        if (empty($cohortids)) {
-            return;
-        }
-
-        require_once($CFG->dirroot . '/cohort/lib.php');
-        $cohorts = $DB->get_records_list('cohort', 'id', $cohortids, '', 'id');
-        foreach ($cohorts as $cohort) {
-            cohort_add_member($cohort->id, $userid);
-        }
-    }
-
-    /**
-     * Return the valid cohort IDs stored by the multi-select setting.
-     *
-     * @return int[] Cohort IDs.
-     */
-    protected function get_configured_cohort_ids(): array {
-        if (empty($this->config->createusercohorts)) {
-            return [];
-        }
-
-        $configured = is_array($this->config->createusercohorts)
-            ? $this->config->createusercohorts
-            : explode(',', $this->config->createusercohorts);
-        $cohortids = array_map('intval', $configured);
-        $cohortids = array_filter($cohortids, static function (int $cohortid): bool {
-            return $cohortid > 0;
-        });
-
-        return array_values(array_unique($cohortids));
-    }
-
-    /**
-     * Update an existing user.
-     *
-     * @param stdClass $user Existing user record.
-     * @param array $data Validated user data from web service.
-     *
-     * @return object User object.
-     */
-    protected function update_user(\stdClass $user, array $data) {
-        global $DB, $CFG;
-
-        $userdata = $data;
-        unset($userdata['ip']);
-        $userdata['auth'] = 'userkey';
-
-        $changed = false;
-        foreach ($userdata as $key => $value) {
-            if ($user->$key != $value) {
-                $changed = true;
-                break;
-            }
-        }
-
-        if (!$changed) {
-            return $user;
-        }
-
-        if (
-            isset($userdata['username'])
-            &&
-            $user->username != $userdata['username']
-            &&
-            $DB->record_exists('user', ['username' => $userdata['username'], 'mnethostid' => $CFG->mnet_localhost_id])
-        ) {
-            throw new invalid_parameter_exception('Username already exists: ' . $userdata['username']);
-        }
-
-        $emailchangerequested = isset($userdata['email']) && $user->email != $userdata['email'];
-
-        if (
-            $emailchangerequested
-            &&
-            !validate_email($userdata['email'])
-        ) {
-            throw new invalid_parameter_exception('Email address is invalid: ' . $userdata['email']);
-        } else if ($emailchangerequested && empty($CFG->allowaccountssameemail)) {
-            $select = $DB->sql_equal('email', ':email', false)
-                . ' AND mnethostid = :mnethostid AND id <> :userid';
-            if (
-                $DB->record_exists_select('user', $select, [
-                    'email' => $userdata['email'],
-                    'mnethostid' => $CFG->mnet_localhost_id,
-                    'userid' => $user->id,
-                ])
-            ) {
-                throw new invalid_parameter_exception('Email address already exists: ' . $userdata['email']);
-            }
-        }
-        $userdata['id'] = $user->id;
-
-        $userdata = (object) $userdata;
-        user_update_user($userdata, false);
-        return $DB->get_record('user', ['id' => $user->id]);
-    }
-
-    /**
      * Validate user data from web service.
      *
      * @param mixed $data User data from web service.
@@ -471,10 +316,8 @@ class auth_plugin_userkey extends auth_plugin_base {
     protected function validate_user_data($data) {
         $data = (array)$data;
 
-        $mappingfield = $this->get_mapping_field();
-
-        if (!isset($data[$mappingfield]) || empty($data[$mappingfield])) {
-            throw new invalid_parameter_exception('Required field "' . $mappingfield . '" is not set or empty.');
+        if (empty($data['id'])) {
+            throw new invalid_parameter_exception('Required field "id" is not set or empty.');
         }
 
         if ($this->is_ip_restriction_enabled()) {
@@ -501,21 +344,11 @@ class auth_plugin_userkey extends auth_plugin_base {
     protected function get_user(array $data) {
         global $DB, $CFG;
 
-        $mappingfield = $this->get_mapping_field();
-
-        $params = [
-            $mappingfield => $data[$mappingfield],
+        $user = $DB->get_record('user', [
+            'id' => $data['id'],
             'mnethostid' => $CFG->mnet_localhost_id,
             'deleted' => 0,
-        ];
-
-        // Mapping values such as email and idnumber are not guaranteed to be unique. Never issue
-        // a bearer key when the requested identity could resolve to more than one account.
-        $users = $DB->get_records('user', $params, 'id ASC', '*', 0, 2);
-        if (count($users) > 1) {
-            throw new invalid_parameter_exception('Multiple users match the configured mapping field');
-        }
-        $user = reset($users);
+        ]);
 
         if (empty($user)) {
             throw new invalid_parameter_exception('User is not exist');
@@ -523,10 +356,10 @@ class auth_plugin_userkey extends auth_plugin_base {
             throw new invalid_parameter_exception('User is not active');
         } else if (!empty($user->suspended) || $user->auth === 'nologin') {
             throw new invalid_parameter_exception('User is suspended');
+        } else if (!$this->is_auth_method_allowed($user->auth)) {
+            throw new invalid_parameter_exception(get_string('authmethodnotallowed', 'auth_userkey'));
         } else if (is_siteadmin($user)) {
             throw new invalid_parameter_exception(get_string('siteadminnotallowed', 'auth_userkey'));
-        } else if ($this->should_update_user()) {
-            $user = $this->update_user($user, $data);
         }
 
         return $user;
@@ -581,133 +414,78 @@ class auth_plugin_userkey extends auth_plugin_base {
     }
 
     /**
-     * Create a new user and return a one-time login URL for that account.
+     * Validate Moodle-owned credentials without creating a browser session.
      *
-     * This is intentionally separate from get_login_url(), which only operates on existing users.
+     * The user is resolved before calling authenticate_user_login() so that enabled external
+     * authentication plugins cannot provision a new account as a side effect of a failed lookup.
      *
-     * @param array|stdClass $data New user profile data.
-     * @return string Login URL.
+     * @param string $identifier Moodle username or email address.
+     * @param string $password Plain text password supplied over HTTPS.
+     * @return array Immutable Moodle identity.
+     * @throws \moodle_exception When the credentials or account are not eligible for SSO.
      */
-    public function provision_user_login($data): string {
+    public function authenticate_user(string $identifier, string $password): array {
         global $CFG, $DB;
 
-        if (!$this->should_create_user()) {
-            throw new invalid_parameter_exception(get_string('usercreationdisabled', 'auth_userkey'));
-        }
+        $identifier = trim($identifier);
+        $user = false;
 
-        $userdata = (array) $data;
-        if ($this->is_ip_restriction_enabled()) {
-            if (empty($userdata['ip'])) {
-                throw new invalid_parameter_exception('Required parameter "ip" is not set.');
-            }
-            if (!\core\ip_utils::is_ip_address($userdata['ip'])) {
-                throw new invalid_parameter_exception('IP address is invalid.');
-            }
-        }
-
-        $transaction = $DB->start_delegated_transaction();
-        $user = $this->create_user($userdata);
-        $userkey = $this->userkeymanager->create_key($user->id, $this->get_allowed_ips($userdata));
-        $transaction->allow_commit();
-
-        return $CFG->wwwroot . '/auth/userkey/login.php?key=' . $userkey;
-    }
-
-    /**
-     * Return a list of mapping fields.
-     *
-     * @return array
-     */
-    public function get_allowed_mapping_fields() {
-        return [
-            'username' => get_string('username'),
-            'email' => get_string('email'),
-            'idnumber' => get_string('idnumber'),
-            'id' => get_string('userid', 'auth_userkey'),
-        ];
-    }
-
-    /**
-     * Return a mapping parameter for request_login_url_parameters().
-     *
-     * @return array
-     */
-    protected function get_mapping_parameter() {
-        $mappingfield = $this->get_mapping_field();
-
-        switch ($mappingfield) {
-            case 'username':
-                $parameter = [
-                    'username' => new external_value(
-                        PARAM_USERNAME,
-                        'Username'
-                    ),
-                ];
-                break;
-
-            case 'email':
-                $parameter = [
-                    'email' => new external_value(
-                        PARAM_EMAIL,
-                        'A valid email address'
-                    ),
-                ];
-                break;
-
-            case 'idnumber':
-                $parameter = [
-                    'idnumber' => new external_value(
-                        PARAM_RAW,
-                        'An arbitrary ID code number perhaps from the institution'
-                    ),
-                ];
-                break;
-            case 'id':
-                $parameter = [
-                    'id' => new external_value(
-                        PARAM_INT,
-                        'Database ID of the user'
-                    ),
-                ];
-                break;
-
-            default:
-                $parameter = [];
-                break;
-        }
-
-        return $parameter;
-    }
-
-    /**
-     * Return user fields parameters for request_login_url_parameters().
-     *
-     * @return array
-     */
-    protected function get_user_fields_parameters() {
-        $parameters = [];
-
-        if ($this->is_ip_restriction_enabled()) {
-            $parameters['ip'] = new external_value(
-                PARAM_RAW_TRIMMED,
-                'User IP address'
+        if (validate_email($identifier)) {
+            $select = $DB->sql_equal('email', ':email', false, true)
+                . ' AND mnethostid = :mnethostid AND deleted = 0';
+            $users = $DB->get_records_select(
+                'user',
+                $select,
+                ['email' => $identifier, 'mnethostid' => $CFG->mnet_localhost_id],
+                'id ASC',
+                'id, username, auth, confirmed, suspended, deleted',
+                0,
+                2
             );
+            if (count($users) === 1) {
+                $user = reset($users);
+            }
+        } else {
+            $username = \core_text::strtolower($identifier);
+            if ($username !== '' && $username === \core_user::clean_field($username, 'username')) {
+                $user = $DB->get_record('user', [
+                    'username' => $username,
+                    'mnethostid' => $CFG->mnet_localhost_id,
+                    'deleted' => 0,
+                ], 'id, username, auth, confirmed, suspended, deleted');
+            }
         }
 
-        $mappingfield = $this->get_mapping_field();
-        if ($this->should_update_user()) {
-            $parameters['firstname'] = new external_value(PARAM_NOTAGS, 'The first name(s) of the user', VALUE_OPTIONAL);
-            $parameters['lastname']  = new external_value(PARAM_NOTAGS, 'The family name of the user', VALUE_OPTIONAL);
-
-            if ($mappingfield != 'email') {
-                $parameters['email'] = new external_value(PARAM_RAW_TRIMMED, 'A valid and unique email address', VALUE_OPTIONAL);
-            }
-            if ($mappingfield != 'username') {
-                $parameters['username'] = new external_value(PARAM_USERNAME, 'A valid and unique username', VALUE_OPTIONAL);
-            }
+        if (
+            !$user
+            || !$this->is_auth_method_allowed($user->auth)
+            || !\core_user::is_real_user($user->id)
+            || !empty($user->deleted)
+            || empty($user->confirmed)
+            || !empty($user->suspended)
+            || is_siteadmin($user)
+        ) {
+            throw new moodle_exception('invalidauthentication', 'auth_userkey');
         }
 
-        return $parameters;
+        $failurereason = null;
+        $authenticated = authenticate_user_login($user->username, $password, false, $failurereason);
+        if (
+            !$authenticated
+            || !\core_user::is_real_user($authenticated->id)
+            || !empty($authenticated->deleted)
+            || empty($authenticated->confirmed)
+            || !empty($authenticated->suspended)
+            || !$this->is_auth_method_allowed($authenticated->auth)
+            || is_siteadmin($authenticated)
+        ) {
+            throw new moodle_exception('invalidauthentication', 'auth_userkey');
+        }
+
+        return [
+            'userid' => (int) $authenticated->id,
+            'username' => $authenticated->username,
+        ];
     }
 
     /**
@@ -716,35 +494,15 @@ class auth_plugin_userkey extends auth_plugin_base {
      * @return array
      */
     public function get_request_login_url_user_parameters() {
-        $parameters = array_merge($this->get_mapping_parameter(), $this->get_user_fields_parameters());
-
-        return $parameters;
-    }
-
-    /**
-     * Return parameters for the combined user provisioning and login request.
-     *
-     * @return array
-     */
-    public function get_provision_user_login_parameters(): array {
         $parameters = [
-            'username' => new external_value(PARAM_USERNAME, 'A valid and unique username'),
-            'email' => new external_value(PARAM_EMAIL, 'A valid and unique email address'),
-            'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user'),
-            'lastname' => new external_value(PARAM_NOTAGS, 'The family name of the user'),
-            'idnumber' => new external_value(PARAM_RAW_TRIMMED, 'An optional institution ID number', VALUE_OPTIONAL),
-            'customfields' => new external_multiple_structure(
-                new external_single_structure([
-                    'type' => new external_value(PARAM_ALPHANUMEXT, 'The short name of the custom profile field'),
-                    'value' => new external_value(PARAM_RAW, 'The value of the custom profile field'),
-                ]),
-                'Custom user profile fields',
-                VALUE_OPTIONAL
-            ),
+            'id' => new external_value(PARAM_INT, 'Database ID of the user'),
         ];
 
         if ($this->is_ip_restriction_enabled()) {
-            $parameters['ip'] = new external_value(PARAM_RAW_TRIMMED, 'User IP address');
+            $parameters['ip'] = new external_value(
+                PARAM_RAW_TRIMMED,
+                'User IP address'
+            );
         }
 
         return $parameters;

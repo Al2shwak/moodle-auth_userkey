@@ -15,18 +15,20 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version details.
+ * Confirm a service-created email-authentication account.
  *
  * @package    auth_userkey
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die;
+require_once(__DIR__ . '/../../config.php'); // phpcs:ignore moodle.Files.RequireLogin.Missing
 
-$plugin->version   = 2026090600;        // The current plugin version (Date: YYYYMMDDXX).
-$plugin->release   = '2026090600';      // Match release exactly to version.
-$plugin->requires  = 2024100700;        // Requires Moodle 4.5.
-$plugin->component = 'auth_userkey';    // Full name of the plugin (used for diagnostics).
-$plugin->maturity  = MATURITY_STABLE;
-$plugin->supported = [405, 502];        // A range of supported Moodle branch numbers.
+$data = required_param('data', PARAM_RAW);
+$manager = new \auth_userkey\registration_manager();
+
+if (!$manager->confirm_user($data)) {
+    throw new moodle_exception('invalidconfirmdata', 'error');
+}
+
+redirect($manager->get_confirmation_redirect_url());

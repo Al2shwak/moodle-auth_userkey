@@ -22,57 +22,57 @@ use core_external\external_single_structure;
 use core_external\external_value;
 
 /**
- * External function for creating a user and requesting their first one-time login URL.
+ * External function for validating a student's Moodle credentials.
  *
  * @package    auth_userkey
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class provision_user_login extends external_api {
+class authenticate_user extends external_api {
     /**
-     * Describe the request parameters.
+     * Describe credential parameters.
      *
      * @return external_function_parameters
      */
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
-            'user' => new external_single_structure(
-                get_auth_plugin('userkey')->get_provision_user_login_parameters()
-            ),
+            'identifier' => new external_value(PARAM_RAW_TRIMMED, 'Moodle username or email address'),
+            'password' => new external_value(PARAM_RAW, 'Plain text password sent only over HTTPS'),
         ]);
     }
 
     /**
-     * Create a new user and generate a one-time login URL.
+     * Validate credentials without creating a Moodle browser session.
      *
-     * @param array $user New user data.
-     * @return array Login URL.
+     * @param string $identifier Username or email address.
+     * @param string $password Plain text password.
+     * @return array
      */
-    public static function execute(array $user): array {
+    public static function execute(string $identifier, string $password): array {
         if (!is_enabled_auth('userkey')) {
             throw new \moodle_exception('pluginisdisabled', 'auth_userkey');
         }
 
-        $params = self::validate_parameters(self::execute_parameters(), ['user' => $user]);
-
+        $params = self::validate_parameters(self::execute_parameters(), [
+            'identifier' => $identifier,
+            'password' => $password,
+        ]);
         $context = \context_system::instance();
         self::validate_context($context);
-        require_capability('auth/userkey:generatekey', $context);
-        require_capability('auth/userkey:createuser', $context);
+        require_capability('auth/userkey:authenticate', $context);
 
-        return [
-            'loginurl' => get_auth_plugin('userkey')->provision_user_login($params['user']),
-        ];
+        return get_auth_plugin('userkey')->authenticate_user($params['identifier'], $params['password']);
     }
 
     /**
-     * Describe the return value.
+     * Describe the authenticated identity.
      *
      * @return external_single_structure
      */
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
-            'loginurl' => new external_value(PARAM_RAW, 'One-time login URL for the newly created user'),
+            'userid' => new external_value(PARAM_INT, 'Immutable Moodle user ID'),
+            'username' => new external_value(PARAM_USERNAME, 'Moodle username'),
         ]);
     }
 }

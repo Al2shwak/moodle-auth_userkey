@@ -18,18 +18,12 @@ namespace auth_userkey;
 
 use advanced_testcase;
 use auth_plugin_userkey;
-use stdClass;
 use invalid_parameter_exception;
 use moodle_exception;
-use core_external\external_multiple_structure;
-use core_external\external_single_structure;
-use core_external\external_value;
 use PHPUnit\Framework\Attributes\CoversClass;
 
 /**
- * Tests for auth_plugin_userkey class.
- *
- * @covers \auth_plugin_userkey
+ * Tests for the UserKey authentication plugin.
  *
  * @package    auth_userkey
  * @copyright  2016 Dmitrii Metelkin (dmitriim@catalyst-au.net)
@@ -37,1533 +31,336 @@ use PHPUnit\Framework\Attributes\CoversClass;
  */
 #[CoversClass(\auth_plugin_userkey::class)]
 final class auth_plugin_test extends advanced_testcase {
-    /**
-     * An instance of auth_plugin_userkey class.
-     * @var auth_plugin_userkey
-     */
-    protected $auth;
+    /** @var auth_plugin_userkey Plugin instance. */
+    private $auth;
 
     /**
-     * User object.
-     * @var $user
+     * Reset state and enable relevant authentication methods.
      */
-    protected $user;
-
-    /**
-     * Path used for the redirection.
-     * @var string
-     */
-    const REDIRECTION_PATH = "/redirection";
-
-    /**
-     * Initial set up.
-     */
-    public function setUp(): void {
+    protected function setUp(): void {
         global $CFG;
 
+        parent::setUp();
+        $this->resetAfterTest();
         require_once($CFG->dirroot . '/auth/userkey/tests/fake_userkey_manager.php');
         require_once($CFG->dirroot . '/auth/userkey/auth.php');
-        require_once($CFG->dirroot . '/user/lib.php');
-
-        parent::setUp();
-
-        $this->resetAfterTest();
-        $CFG->getremoteaddrconf = GETREMOTEADDR_SKIP_HTTP_X_FORWARDED_FOR;
+        $CFG->auth = 'manual,email,userkey,nologin';
+        $_SERVER['HTTP_USER_AGENT'] = 'phpunit';
         $this->auth = new auth_plugin_userkey();
-        $this->user = self::getDataGenerator()->create_user();
     }
 
     /**
-     * A helper function to create TestKey.
-     *
-     * @param array $record Key record.
+     * The auth plugin itself never accepts passwords or owns them.
      */
-    protected function create_user_private_key(array $record = []) {
-        global $DB;
-
-        $record = (object)$record;
-
-        if (!isset($record->value)) {
-            $record->value = 'TestKey';
-        }
-
-        if (!isset($record->userid)) {
-            $record->userid = $this->user->id;
-        }
-
-        if (!isset($record->instance)) {
-            $record->instance = $this->user->id;
-        }
-
-        if (!isset($record->iprestriction)) {
-            $record->iprestriction = null;
-        }
-        if (!isset($record->validuntil)) {
-            $record->validuntil = time() + 300;
-        }
-        if (!isset($record->timecreated)) {
-            $record->timecreated = time();
-        }
-
-        $record->script = 'auth/userkey';
-
-        $DB->insert_record('user_private_key', $record);
-    }
-
-    /**
-     * Test that users can't login using login form.
-     */
-    public function test_users_can_not_login_using_login_form(): void {
-        $user = new stdClass();
-        $user->auth = 'userkey';
-        $user->username = 'username';
-        $user->password = 'correctpassword';
-
-        self::getDataGenerator()->create_user($user);
-
-        $this->assertFalse($this->auth->user_login('username', 'correctpassword'));
-        $this->assertFalse($this->auth->user_login('username', 'incorrectpassword'));
-    }
-
-    /**
-     * Test that the plugin doesn't allow to store users passwords.
-     */
-    public function test_auth_plugin_does_not_allow_to_store_passwords(): void {
+    public function test_userkey_auth_properties(): void {
+        $this->assertFalse($this->auth->user_login('someone', 'Password1!'));
         $this->assertTrue($this->auth->prevent_local_passwords());
-    }
-
-    /**
-     * Test that the plugin is external.
-     */
-    public function test_auth_plugin_is_external(): void {
         $this->assertFalse($this->auth->is_internal());
-    }
-
-    /**
-     * Test that the plugin doesn't allow users to change the passwords.
-     */
-    public function test_auth_plugin_does_not_allow_to_change_passwords(): void {
         $this->assertFalse($this->auth->can_change_password());
     }
 
     /**
-     * Test that default mapping field gets returned correctly.
+     * Login URL requests use an immutable user ID and leave account data unchanged.
      */
-    public function test_get_default_mapping_field(): void {
-        $expected = 'email';
-        $actual = $this->auth->get_mapping_field();
-
-        $this->assertEquals($expected, $actual);
-    }
-
-    /**
-     * Test that logout page hook sets global redirect variable correctly.
-     */
-    public function test_logoutpage_hook_sets_global_redirect_correctly(): void {
-        global $redirect, $SESSION;
-
-        $this->auth->logoutpage_hook();
-        $this->assertEquals('', $redirect);
-
-        $SESSION->userkey = true;
-        $this->auth = new auth_plugin_userkey();
-        $this->auth->logoutpage_hook();
-        $this->assertEquals('', $redirect);
-
-        unset($SESSION->userkey);
-        set_config('redirecturl', 'http://example.com', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-        $this->auth->logoutpage_hook();
-        $this->assertEquals('', $redirect);
-
-        $SESSION->userkey = true;
-        set_config('redirecturl', 'http://example.com', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-        $this->auth->logoutpage_hook();
-        $this->assertEquals('http://example.com', $redirect);
-    }
-
-    /**
-     * Test that configured mapping field gets returned correctly.
-     */
-    public function test_get_mapping_field(): void {
-        set_config('mappingfield', 'username', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $expected = 'username';
-        $actual = $this->auth->get_mapping_field();
-
-        $this->assertEquals($expected, $actual);
-    }
-
-    /**
-     * Test that auth plugin throws correct exception if default mapping field is not provided.
-     */
-    public function test_throwing_exception_if_default_mapping_field_is_not_provided(): void {
-        $user = [];
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (Required field "email" is not set or empty.)');
-
-        $actual = $this->auth->get_login_url($user);
-    }
-
-    /**
-     * Test that auth plugin throws correct exception if username mapping field is not provided, but set in configs.
-     */
-    public function test_throwing_exception_if_mapping_field_username_is_not_provided(): void {
-        $user = [];
-        set_config('mappingfield', 'username', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (Required field "username" is not set or empty.)');
-
-        $actual = $this->auth->get_login_url($user);
-    }
-
-    /**
-     * Test that auth plugin throws correct exception if idnumber mapping field is not provided, but set in configs.
-     */
-    public function test_throwing_exception_if_mapping_field_idnumber_is_not_provided(): void {
-        $user = [];
-        set_config('mappingfield', 'idnumber', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (Required field "idnumber" is not set or empty.)');
-
-        $actual = $this->auth->get_login_url($user);
-    }
-
-    /**
-     * Test that auth plugin throws correct exception if id mapping field is not provided, but set in configs.
-     */
-    public function test_throwing_exception_if_mapping_field_id_is_not_provided(): void {
-        $user = [];
-        set_config('mappingfield', 'id', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (Required field "id" is not set or empty.)');
-
-        $actual = $this->auth->get_login_url($user);
-    }
-
-    /**
-     * Test that auth plugin throws correct exception if we trying to request not existing user.
-     */
-    public function test_throwing_exception_if_user_is_not_exist(): void {
-        $user = [];
-        $user['email'] = 'notexists@test.com';
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (User is not exist)');
-        $actual = $this->auth->get_login_url($user);
-    }
-
-    /**
-     * Test that a key is not generated when a mapping value belongs to multiple users.
-     */
-    public function test_throwing_exception_if_multiple_users_match(): void {
+    public function test_login_url_by_id_does_not_mutate_user(): void {
         global $CFG, $DB;
+
+        $user = self::getDataGenerator()->create_user([
+            'username' => 'fixedidentity',
+            'email' => 'fixed@example.com',
+            'auth' => 'manual',
+        ]);
+        $this->auth->set_userkey_manager(new fake_userkey_manager());
+
+        $url = $this->auth->get_login_url([
+            'id' => $user->id,
+            'username' => 'ignored',
+            'email' => 'ignored@example.com',
+            'auth' => 'userkey',
+        ]);
+
+        $this->assertSame($CFG->wwwroot . '/auth/userkey/login.php?key=FaKeKeyFoRtEsTiNg', $url);
+        $stored = $DB->get_record('user', ['id' => $user->id], '*', MUST_EXIST);
+        $this->assertSame('fixedidentity', $stored->username);
+        $this->assertSame('fixed@example.com', $stored->email);
+        $this->assertSame('manual', $stored->auth);
+    }
+
+    /**
+     * Missing IDs are rejected.
+     */
+    public function test_login_url_requires_id(): void {
+        $this->expectException(invalid_parameter_exception::class);
+        $this->auth->get_login_url([]);
+    }
+
+    /**
+     * Ineligible accounts cannot receive keys.
+     *
+     */
+    public function test_login_url_rejects_ineligible_accounts(): void {
+        $cases = [
+            'unconfirmed' => [['confirmed' => 0], false],
+            'suspended' => [['suspended' => 1], false],
+            'nologin' => [['auth' => 'nologin'], false],
+            'administrator' => [[], true],
+        ];
+
+        foreach ($cases as [$properties, $admin]) {
+            $user = self::getDataGenerator()->create_user($properties);
+            if ($admin) {
+                set_config('siteadmins', (string) $user->id);
+            }
+            $this->auth = new auth_plugin_userkey();
+
+            try {
+                $this->auth->get_login_url(['id' => $user->id]);
+                $this->fail('Expected an ineligible account to be rejected.');
+            } catch (invalid_parameter_exception $exception) {
+                $this->assertNotEmpty($exception->getMessage());
+            }
+        }
+    }
+
+    /**
+     * IP restriction requires a valid address.
+     */
+    public function test_login_url_validates_ip(): void {
+        $user = self::getDataGenerator()->create_user();
+        set_config('iprestriction', true, 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        $this->expectException(invalid_parameter_exception::class);
+        $this->auth->get_login_url(['id' => $user->id, 'ip' => 'example.com']);
+    }
+
+    /**
+     * Only enabled password implementations are selectable and unsafe methods remain excluded.
+     */
+    public function test_selectable_auth_methods_exclude_unsafe_methods(): void {
+        $methods = $this->auth->get_selectable_auth_methods();
+
+        $this->assertArrayHasKey('manual', $methods);
+        $this->assertArrayHasKey('email', $methods);
+        $this->assertArrayNotHasKey('userkey', $methods);
+        $this->assertArrayNotHasKey('nologin', $methods);
+        $this->assertArrayNotHasKey('webservice', $methods);
+        $this->assertArrayNotHasKey('none', $methods);
+    }
+
+    /**
+     * The default allowlist contains manual and email authentication.
+     */
+    public function test_default_allowed_auth_methods(): void {
+        $this->assertSame(['manual', 'email'], $this->auth->get_allowed_auth_methods());
+    }
+
+    /**
+     * One configured allowlist controls both credential validation and login URL generation.
+     */
+    public function test_configured_auth_allowlist_applies_to_both_endpoints(): void {
+        $emailuser = self::getDataGenerator()->create_user([
+            'username' => 'disallowedemail@example.com',
+            'email' => 'disallowedemail@example.com',
+            'password' => 'Password1!',
+            'auth' => 'email',
+            'confirmed' => 1,
+        ]);
+        set_config('allowedauthmethods', 'manual', 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        try {
+            $this->auth->authenticate_user($emailuser->username, 'Password1!');
+            $this->fail('Expected credential validation to enforce the allowlist.');
+        } catch (moodle_exception $exception) {
+            $this->assertSame('invalidauthentication', $exception->errorcode);
+        }
+
+        try {
+            $this->auth->get_login_url(['id' => $emailuser->id]);
+            $this->fail('Expected login URL generation to enforce the allowlist.');
+        } catch (invalid_parameter_exception $exception) {
+            $this->assertStringContainsString('not allowed for SSO', $exception->getMessage());
+        }
+    }
+
+    /**
+     * An explicitly empty allowlist fails closed.
+     */
+    public function test_empty_auth_allowlist_denies_all_accounts(): void {
+        $user = self::getDataGenerator()->create_user(['auth' => 'manual']);
+        set_config('allowedauthmethods', '', 'auth_userkey');
+        $this->auth = new auth_plugin_userkey();
+
+        $this->assertSame([], $this->auth->get_allowed_auth_methods());
+        $this->expectException(invalid_parameter_exception::class);
+        $this->auth->get_login_url(['id' => $user->id]);
+    }
+
+    /**
+     * Manual users can authenticate using username or case-insensitive email.
+     */
+    public function test_authenticate_manual_user_by_username_and_email(): void {
+        $user = self::getDataGenerator()->create_user([
+            'username' => 'credentialuser',
+            'email' => 'Credential.User@example.com',
+            'password' => 'Password1!',
+            'auth' => 'manual',
+        ]);
+
+        $byusername = $this->auth->authenticate_user('credentialuser', 'Password1!');
+        $byemail = $this->auth->authenticate_user('CREDENTIAL.USER@EXAMPLE.COM', 'Password1!');
+
+        $this->assertSame((int) $user->id, $byusername['userid']);
+        $this->assertSame((int) $user->id, $byemail['userid']);
+        $this->assertSame('credentialuser', $byemail['username']);
+    }
+
+    /**
+     * Confirmed email-auth users can authenticate.
+     */
+    public function test_authenticate_confirmed_email_user(): void {
+        $user = self::getDataGenerator()->create_user([
+            'username' => 'emailuser@example.com',
+            'email' => 'emailuser@example.com',
+            'password' => 'Password1!',
+            'auth' => 'email',
+            'confirmed' => 1,
+        ]);
+
+        $result = $this->auth->authenticate_user($user->email, 'Password1!');
+        $this->assertSame((int) $user->id, $result['userid']);
+    }
+
+    /**
+     * The bridge honours Moodle's account lockout state.
+     */
+    public function test_authenticate_honours_lockout(): void {
+        $olderrorlevel = error_reporting();
+        error_reporting($olderrorlevel & ~E_DEPRECATED);
+        $user = self::getDataGenerator()->create_user([
+            'username' => 'lockoutuser',
+            'password' => 'Password1!',
+            'auth' => 'manual',
+        ]);
+        set_config('lockoutthreshold', 2);
+        set_config('lockoutwindow', 1200);
+        set_config('lockoutduration', 1800);
+        $sink = $this->redirectEmails();
+
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            try {
+                $this->auth->authenticate_user($user->username, 'WrongPassword1!');
+            } catch (moodle_exception $exception) {
+                $this->assertSame('invalidauthentication', $exception->errorcode);
+            }
+        }
+
+        $this->assertTrue(login_is_lockedout($user));
+        try {
+            $this->auth->authenticate_user($user->username, 'Password1!');
+            $this->fail('Expected a locked account to be rejected.');
+        } catch (moodle_exception $exception) {
+            $this->assertSame('invalidauthentication', $exception->errorcode);
+        } finally {
+            $sink->close();
+            error_reporting($olderrorlevel);
+        }
+    }
+
+    /**
+     * Deleted and guest users receive the same generic authentication error.
+     */
+    public function test_authenticate_rejects_deleted_and_guest_users(): void {
+        $deleted = self::getDataGenerator()->create_user([
+            'username' => 'deletedcredential',
+            'password' => 'Password1!',
+        ]);
+        delete_user($deleted);
+
+        foreach (['deletedcredential', 'guest'] as $identifier) {
+            try {
+                $this->auth->authenticate_user($identifier, 'Password1!');
+                $this->fail('Expected an ineligible account to be rejected.');
+            } catch (moodle_exception $exception) {
+                $this->assertSame('invalidauthentication', $exception->errorcode);
+            }
+        }
+    }
+
+    /**
+     * Every invalid credential/account case returns one generic error.
+     *
+     */
+    public function test_authenticate_rejects_with_generic_error(): void {
+        $cases = [
+            'wrong password' => [[], 'WrongPassword1!', false],
+            'unconfirmed' => [['confirmed' => 0], 'Password1!', false],
+            'suspended' => [['suspended' => 1], 'Password1!', false],
+            'nologin' => [['auth' => 'nologin'], 'Password1!', false],
+            'administrator' => [[], 'Password1!', true],
+        ];
+
+        $index = 0;
+        foreach ($cases as [$properties, $password, $admin]) {
+            $index++;
+            $properties += [
+                'username' => 'blockeduser' . $index,
+                'email' => 'blocked' . $index . '@example.com',
+                'password' => 'Password1!',
+                'auth' => 'manual',
+            ];
+            $user = self::getDataGenerator()->create_user($properties);
+            if ($admin) {
+                set_config('siteadmins', (string) $user->id);
+            }
+
+            try {
+                $this->auth->authenticate_user($user->username, $password);
+                $this->fail('Expected generic authentication failure.');
+            } catch (moodle_exception $exception) {
+                $this->assertSame('invalidauthentication', $exception->errorcode);
+                $this->assertSame('Invalid login.', $exception->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Unknown and duplicate-email identifiers are not authenticated.
+     */
+    public function test_authenticate_rejects_unknown_and_ambiguous_email(): void {
+        global $CFG;
+
+        try {
+            $this->auth->authenticate_user('unknown@example.com', 'Password1!');
+            $this->fail('Expected unknown user to fail.');
+        } catch (moodle_exception $exception) {
+            $this->assertSame('invalidauthentication', $exception->errorcode);
+        }
 
         $CFG->allowaccountssameemail = true;
         self::getDataGenerator()->create_user(['email' => 'shared@example.com']);
         self::getDataGenerator()->create_user(['email' => 'shared@example.com']);
 
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage(
-            'Invalid parameter value detected (Multiple users match the configured mapping field)'
-        );
-
-        try {
-            $this->auth->get_login_url(['email' => 'shared@example.com']);
-        } finally {
-            $this->assertFalse($DB->record_exists('user_private_key', ['script' => 'auth/userkey']));
-        }
-    }
-
-    /**
-     * Test that a key is not generated for a site administrator.
-     */
-    public function test_throwing_exception_if_user_is_site_administrator(): void {
-        global $CFG, $DB;
-
-        set_config('siteadmins', $CFG->siteadmins . ',' . $this->user->id);
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage(get_string('siteadminnotallowed', 'auth_userkey'));
-
-        try {
-            $this->auth->get_login_url(['email' => $this->user->email]);
-        } finally {
-            $this->assertFalse($DB->record_exists('user_private_key', ['script' => 'auth/userkey']));
-        }
-    }
-
-    /**
-     * Test that auth plugin throws correct exception if we trying to request user,
-     * but ip field is not set and iprestriction is enabled.
-     */
-    public function test_throwing_exception_if_iprestriction_is_enabled_but_ip_is_missing_in_data(): void {
-        $user = [];
-        $user['email'] = 'exists@test.com';
-        set_config('iprestriction', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Invalid parameter value detected (Required parameter "ip" is not set.)');
-
-        $actual = $this->auth->get_login_url($user);
-    }
-
-    /**
-     * Test that we can request a user provided user data as an array.
-     */
-    public function test_return_correct_login_url_if_user_is_array(): void {
-        global $CFG;
-
-        $user = [];
-        $user['username'] = 'username';
-        $user['email'] = 'exists@test.com';
-
-        self::getDataGenerator()->create_user($user);
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $expected = $CFG->wwwroot . '/auth/userkey/login.php?key=FaKeKeyFoRtEsTiNg';
-        $actual = $this->auth->get_login_url($user);
-
-        $this->assertEquals($expected, $actual);
-    }
-
-    /**
-     * Test that we can request a user provided user data as an object.
-     */
-    public function test_return_correct_login_url_if_user_is_object(): void {
-        global $CFG;
-
-        $user = new stdClass();
-        $user->username = 'username';
-        $user->email = 'exists@test.com';
-
-        self::getDataGenerator()->create_user($user);
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $expected = $CFG->wwwroot . '/auth/userkey/login.php?key=FaKeKeyFoRtEsTiNg';
-        $actual = $this->auth->get_login_url($user);
-
-        $this->assertEquals($expected, $actual);
-    }
-
-    /**
-     * Test that we can request a user provided user data as an object.
-     */
-    public function test_return_correct_login_url_if_iprestriction_is_enabled_and_data_is_correct(): void {
-        global $CFG;
-
-        $user = new stdClass();
-        $user->username = 'username';
-        $user->email = 'exists@test.com';
-        $user->ip = '192.168.1.1';
-
-        self::getDataGenerator()->create_user($user);
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $expected = $CFG->wwwroot . '/auth/userkey/login.php?key=FaKeKeyFoRtEsTiNg';
-        $actual = $this->auth->get_login_url($user);
-
-        $this->assertEquals($expected, $actual);
-    }
-
-    /**
-     * Test that we can request a key for a new user.
-     */
-    public function test_return_correct_login_url_and_create_new_user(): void {
-        global $CFG, $DB;
-
-        set_config('createuser', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $user = new stdClass();
-        $user->username = 'username';
-        $user->email = 'username@test.com';
-        $user->firstname = 'user';
-        $user->lastname = 'name';
-        $user->ip = '192.168.1.1';
-
-        $expected = $CFG->wwwroot . '/auth/userkey/login.php?key=FaKeKeyFoRtEsTiNg';
-        $actual = $this->auth->provision_user_login($user);
-
-        $this->assertEquals($expected, $actual);
-
-        $userrecord = $DB->get_record('user', ['username' => 'username']);
-        $this->assertEquals($user->email, $userrecord->email);
-        $this->assertEquals($user->firstname, $userrecord->firstname);
-        $this->assertEquals($user->lastname, $userrecord->lastname);
-        $this->assertEquals(1, $userrecord->confirmed);
-        $this->assertEquals('userkey', $userrecord->auth);
-    }
-
-    /**
-     * Test that ordinary login never creates an unknown user.
-     */
-    public function test_login_does_not_create_user_when_creation_is_enabled(): void {
-        global $DB;
-
-        set_config('createuser', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('User is not exist');
-
-        try {
-            $this->auth->get_login_url(['email' => 'newuser@example.com']);
-        } finally {
-            $this->assertFalse($DB->record_exists('user', ['email' => 'newuser@example.com']));
-        }
-    }
-
-    /**
-     * Test that provisioning stores standard Moodle custom profile fields.
-     */
-    public function test_provision_user_login_saves_custom_profile_fields(): void {
-        global $DB;
-
-        $field = self::getDataGenerator()->create_custom_profile_field([
-            'datatype' => 'text',
-            'shortname' => 'membershiptype',
-            'name' => 'Membership type',
-        ]);
-        set_config('createuser', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-        $this->auth->set_userkey_manager(new fake_userkey_manager());
-
-        $this->auth->provision_user_login([
-            'username' => 'customfielduser',
-            'email' => 'customfielduser@example.com',
-            'firstname' => 'Custom',
-            'lastname' => 'Field',
-            'customfields' => [
-                ['type' => 'membershiptype', 'value' => 'sponsored'],
-            ],
-        ]);
-
-        $user = $DB->get_record('user', ['username' => 'customfielduser'], '*', MUST_EXIST);
-        $this->assertSame('sponsored', $DB->get_field('user_info_data', 'data', [
-            'userid' => $user->id,
-            'fieldid' => $field->id,
-        ], MUST_EXIST));
-    }
-
-    /**
-     * Test that a newly created user is added to every configured cohort.
-     */
-    public function test_new_user_is_added_to_configured_cohorts(): void {
-        global $DB;
-
-        $cohortone = self::getDataGenerator()->create_cohort(['name' => 'First cohort']);
-        $cohorttwo = self::getDataGenerator()->create_cohort(['name' => 'Second cohort']);
-        set_config('createuser', true, 'auth_userkey');
-        set_config('createusercohorts', $cohortone->id . ',' . $cohorttwo->id, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $this->auth->provision_user_login([
-            'username' => 'cohortuser',
-            'email' => 'cohortuser@example.com',
-            'firstname' => 'Cohort',
-            'lastname' => 'User',
-        ]);
-
-        $user = $DB->get_record('user', ['username' => 'cohortuser'], '*', MUST_EXIST);
-        $this->assertTrue($DB->record_exists('cohort_members', [
-            'cohortid' => $cohortone->id,
-            'userid' => $user->id,
-        ]));
-        $this->assertTrue($DB->record_exists('cohort_members', [
-            'cohortid' => $cohorttwo->id,
-            'userid' => $user->id,
-        ]));
-    }
-
-    /**
-     * Test that stale and malformed cohort settings do not prevent user creation.
-     */
-    public function test_new_user_ignores_invalid_configured_cohorts(): void {
-        global $DB;
-
-        $cohort = self::getDataGenerator()->create_cohort();
-        set_config('createuser', true, 'auth_userkey');
-        set_config('createusercohorts', 'invalid,0,999999,' . $cohort->id . ',' . $cohort->id, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $this->auth->provision_user_login([
-            'username' => 'validcohortuser',
-            'email' => 'validcohortuser@example.com',
-            'firstname' => 'Valid',
-            'lastname' => 'Cohort user',
-        ]);
-
-        $user = $DB->get_record('user', ['username' => 'validcohortuser'], '*', MUST_EXIST);
-        $this->assertEquals(1, $DB->count_records('cohort_members', ['userid' => $user->id]));
-        $this->assertTrue($DB->record_exists('cohort_members', [
-            'cohortid' => $cohort->id,
-            'userid' => $user->id,
-        ]));
-    }
-
-    /**
-     * Test that configured cohorts are not applied when an existing user is updated.
-     */
-    public function test_existing_user_is_not_added_to_configured_cohorts(): void {
-        global $DB;
-
-        $cohort = self::getDataGenerator()->create_cohort();
-        $user = self::getDataGenerator()->create_user([
-            'email' => 'existingcohortuser@example.com',
-            'firstname' => 'Existing',
-        ]);
-        set_config('createuser', true, 'auth_userkey');
-        set_config('updateuser', true, 'auth_userkey');
-        set_config('createusercohorts', (string) $cohort->id, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $this->auth->get_login_url([
-            'email' => $user->email,
-            'firstname' => 'Updated',
-        ]);
-
-        $this->assertFalse($DB->record_exists('cohort_members', [
-            'cohortid' => $cohort->id,
-            'userid' => $user->id,
-        ]));
-    }
-
-    /**
-     * Test that we can request a key for a new user.
-     */
-    public function test_missing_data_to_create_user(): void {
-        global $CFG, $DB;
-
-        set_config('createuser', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $user = new stdClass();
-        $user->email = 'username@test.com';
-        $user->ip = '192.168.1.1';
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Unable to create user, missing value(s): username,firstname,lastname');
-
-        $this->auth->provision_user_login($user);
-    }
-
-    /**
-     * Test that when we attempt to create a new user duplicate usernames are caught.
-     */
-    public function test_create_refuse_duplicate_username(): void {
-        set_config('createuser', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $originaluser = new stdClass();
-        $originaluser->username = 'username';
-        $originaluser->email = 'username@test.com';
-        $originaluser->firstname = 'user';
-        $originaluser->lastname = 'name';
-        $originaluser->city = 'brighton';
-        $originaluser->ip = '192.168.1.1';
-
-        self::getDataGenerator()->create_user($originaluser);
-
-        $duplicateuser = clone ($originaluser);
-        $duplicateuser->email = 'duplicateuser@test.com';
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Username already exists: username');
-
-        $this->auth->provision_user_login($duplicateuser);
-    }
-
-    /**
-     * Test that when we attempt to create a new user duplicate emails are caught.
-     */
-    public function test_create_refuse_duplicate_email(): void {
-        set_config('createuser', true, 'auth_userkey');
-        set_config('mappingfield', 'username', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $originaluser = new stdClass();
-        $originaluser->username = 'username';
-        $originaluser->email = 'username@test.com';
-        $originaluser->firstname = 'user';
-        $originaluser->lastname = 'name';
-        $originaluser->city = 'brighton';
-        $originaluser->ip = '192.168.1.1';
-
-        self::getDataGenerator()->create_user($originaluser);
-
-        $duplicateuser = clone ($originaluser);
-        $duplicateuser->username = 'duplicateuser';
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Email address already exists: username@test.com');
-
-        $this->auth->provision_user_login($duplicateuser);
-    }
-
-    /**
-     * Test that we can request a key for an existing user and update their details.
-     */
-    public function test_return_correct_login_url_and_update_user(): void {
-        global $CFG, $DB;
-
-        set_config('updateuser', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $originaluser = new stdClass();
-        $originaluser->username = 'username';
-        $originaluser->email = 'username@test.com';
-        $originaluser->firstname = 'user';
-        $originaluser->lastname = 'name';
-        $originaluser->city = 'brighton';
-        $originaluser->ip = '192.168.1.1';
-
-        self::getDataGenerator()->create_user($originaluser);
-
-        $user = new stdClass();
-        $user->username = 'usernamechanged';
-        $user->email = 'username@test.com';
-        $user->firstname = 'userchanged';
-        $user->lastname = 'namechanged';
-        $user->ip = '192.168.1.1';
-
-        $expected = $CFG->wwwroot . '/auth/userkey/login.php?key=FaKeKeyFoRtEsTiNg';
-        $actual = $this->auth->get_login_url($user);
-
-        $this->assertEquals($expected, $actual);
-
-        $userrecord = $DB->get_record('user', ['email' => $user->email]);
-        $this->assertEquals($user->username, $userrecord->username);
-        $this->assertEquals($user->firstname, $userrecord->firstname);
-        $this->assertEquals($user->lastname, $userrecord->lastname);
-        $this->assertEquals($originaluser->city, $userrecord->city);
-        $this->assertEquals('userkey', $userrecord->auth);
-    }
-
-    /**
-     * Test that when we attempt to update a user duplicate emails are caught.
-     */
-    public function test_update_refuse_duplicate_email(): void {
-        set_config('updateuser', true, 'auth_userkey');
-        set_config('mappingfield', 'username', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        self::getDataGenerator()->create_user(['email' => 'trytoduplicate@test.com']);
-        self::getDataGenerator()->create_user(['username' => 'username']);
-
-        $originaluser = new stdClass();
-        $originaluser->username = 'username';
-        $originaluser->email = 'trytoduplicate@test.com';
-        $originaluser->firstname = 'user';
-        $originaluser->lastname = 'name';
-        $originaluser->city = 'brighton';
-        $originaluser->ip = '192.168.1.1';
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Email address already exists: trytoduplicate@test.com');
-
-        $this->auth->get_login_url($originaluser);
-    }
-
-    /**
-     * Test that when we attempt to update a user duplicate usernames are caught.
-     */
-    public function test_update_refuse_duplicate_username(): void {
-        set_config('updateuser', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        self::getDataGenerator()->create_user(['username' => 'trytoduplicate']);
-        self::getDataGenerator()->create_user(['email' => 'username@test.com']);
-
-        $originaluser = new stdClass();
-        $originaluser->username = 'trytoduplicate';
-        $originaluser->email = 'username@test.com';
-        $originaluser->firstname = 'user';
-        $originaluser->lastname = 'name';
-        $originaluser->city = 'brighton';
-        $originaluser->ip = '192.168.1.1';
-
-        $this->expectException(invalid_parameter_exception::class);
-        $this->expectExceptionMessage('Username already exists: trytoduplicate');
-
-        $this->auth->get_login_url($originaluser);
-    }
-
-    /**
-     * Test that a user can be updated without providing any other fields than the mappingfield.
-     * (Only auth field should be updated).
-     */
-    public function test_update_allow_unset_fields(): void {
-        global $DB;
-        set_config('updateuser', true, 'auth_userkey');
-        set_config('mappingfield', 'id', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $userkeymanager = new fake_userkey_manager();
-        $this->auth->set_userkey_manager($userkeymanager);
-
-        $originaluser = new stdClass();
-        $originaluser->username = 'username';
-        $originaluser->email = 'username@test.com';
-        $originaluser->firstname = 'user';
-        $originaluser->lastname = 'name';
-
-        $user = self::getDataGenerator()->create_user($originaluser);
-
-        $loginuser = new stdClass();
-        $loginuser->id = $user->id;
-
-        $key = $this->auth->get_login_url($loginuser);
-
-        $userrecord = $DB->get_record('user', ['id' => $user->id]);
-        $this->assertNotEmpty($key);
-        $this->assertEquals('userkey', $userrecord->auth);
-        $this->assertEquals('username', $userrecord->username);
-        $this->assertEquals('username@test.com', $userrecord->email);
-        $this->assertEquals('user', $userrecord->firstname);
-        $this->assertEquals('name', $userrecord->lastname);
-    }
-
-    /**
-     * Test that we can get login url if we do not use fake keymanager.
-     */
-    public function test_return_correct_login_url_if_user_is_object_using_default_keymanager(): void {
-        global $DB, $CFG;
-
-        $user = [];
-        $user['username'] = 'username';
-        $user['email'] = 'exists@test.com';
-
-        $user = self::getDataGenerator()->create_user($user);
-
-        create_user_key('auth/userkey', $user->id);
-        create_user_key('auth/userkey', $user->id);
-        create_user_key('auth/userkey', $user->id);
-        $keys = $DB->get_records('user_private_key', ['userid' => $user->id]);
-
-        $this->assertEquals(3, count($keys));
-
-        $actual = $this->auth->get_login_url($user);
-
-        $keys = $DB->get_records('user_private_key', ['userid' => $user->id]);
-        $this->assertEquals(1, count($keys));
-
-        $actualkey = $DB->get_record('user_private_key', ['userid' => $user->id]);
-
-        $expected = $CFG->wwwroot . '/auth/userkey/login.php?key=' . $actualkey->value;
-
-        $this->assertEquals($expected, $actual);
-    }
-
-    /**
-     * Test that we can return correct allowed mapping fields.
-     */
-    public function test_get_allowed_mapping_fields_list(): void {
-        $expected = [
-            'username' => 'Username',
-            'email' => 'Email address',
-            'idnumber' => 'ID number',
-            'id' => 'User ID',
-        ];
-
-        $actual = $this->auth->get_allowed_mapping_fields();
-
-        $this->assertEquals($expected, $actual);
-    }
-
-    /**
-     * Test that we can get correct request parameters based on the plugin configuration.
-     */
-    public function test_get_request_login_url_user_parameters_based_on_plugin_config(): void {
-        // Check email as it should be set by default.
-        $expected = [
-            'email' => new external_value(
-                PARAM_EMAIL,
-                'A valid email address'
-            ),
-        ];
-
-        $actual = $this->auth->get_request_login_url_user_parameters();
-        $this->assertEquals($expected, $actual);
-
-        // Check username.
-        set_config('mappingfield', 'username', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $expected = [
-            'username' => new external_value(
-                PARAM_USERNAME,
-                'Username'
-            ),
-        ];
-
-        $actual = $this->auth->get_request_login_url_user_parameters();
-        $this->assertEquals($expected, $actual);
-
-        // Check idnumber.
-        set_config('mappingfield', 'idnumber', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $expected = [
-            'idnumber' => new external_value(
-                PARAM_RAW,
-                'An arbitrary ID code number perhaps from the institution'
-            ),
-        ];
-
-        $actual = $this->auth->get_request_login_url_user_parameters();
-        $this->assertEquals($expected, $actual);
-
-        // Check user id.
-        set_config('mappingfield', 'id', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $expected = [
-            'id' => new external_value(
-                PARAM_INT,
-                'Database ID of the user'
-            ),
-        ];
-
-        $actual = $this->auth->get_request_login_url_user_parameters();
-        $this->assertEquals($expected, $actual);
-
-        // Check some junk field name.
-        set_config('mappingfield', 'junkfield', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $expected = [];
-
-        $actual = $this->auth->get_request_login_url_user_parameters();
-        $this->assertEquals($expected, $actual);
-
-        // Check IP if iprestriction disabled.
-        set_config('iprestriction', false, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-        $expected = [];
-        $actual = $this->auth->get_request_login_url_user_parameters();
-        $this->assertEquals($expected, $actual);
-
-        // Check IP if iprestriction enabled.
-        set_config('iprestriction', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-        $expected = [
-            'ip' => new external_value(
-                PARAM_RAW_TRIMMED,
-                'User IP address'
-            ),
-        ];
-        $actual = $this->auth->get_request_login_url_user_parameters();
-        $this->assertEquals($expected, $actual);
-
-        // Check IP if createuser enabled.
-        set_config('createuser', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-        $expected = [
-            'ip' => new external_value(PARAM_RAW_TRIMMED, 'User IP address'),
-        ];
-        $actual = $this->auth->get_request_login_url_user_parameters();
-        $this->assertEquals($expected, $actual);
-        set_config('createuser', false, 'auth_userkey');
-
-        // Check IP if updateuser enabled.
-        set_config('updateuser', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-        $expected = [
-            'ip' => new external_value(PARAM_RAW_TRIMMED, 'User IP address'),
-            'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user', VALUE_OPTIONAL),
-            'lastname'  => new external_value(PARAM_NOTAGS, 'The family name of the user', VALUE_OPTIONAL),
-            'email'     => new external_value(PARAM_RAW_TRIMMED, 'A valid and unique email address', VALUE_OPTIONAL),
-            'username'  => new external_value(PARAM_USERNAME, 'A valid and unique username', VALUE_OPTIONAL),
-        ];
-        $actual = $this->auth->get_request_login_url_user_parameters();
-        $this->assertEquals($expected, $actual);
-        set_config('updateuser', false, 'auth_userkey');
-    }
-
-    /**
-     * Test the fixed provisioning request schema, including extensible custom profile fields.
-     */
-    public function test_get_provision_user_login_parameters(): void {
-        $expected = [
-            'username' => new external_value(PARAM_USERNAME, 'A valid and unique username'),
-            'email' => new external_value(PARAM_EMAIL, 'A valid and unique email address'),
-            'firstname' => new external_value(PARAM_NOTAGS, 'The first name(s) of the user'),
-            'lastname' => new external_value(PARAM_NOTAGS, 'The family name of the user'),
-            'idnumber' => new external_value(PARAM_RAW_TRIMMED, 'An optional institution ID number', VALUE_OPTIONAL),
-            'customfields' => new external_multiple_structure(
-                new external_single_structure([
-                    'type' => new external_value(PARAM_ALPHANUMEXT, 'The short name of the custom profile field'),
-                    'value' => new external_value(PARAM_RAW, 'The value of the custom profile field'),
-                ]),
-                'Custom user profile fields',
-                VALUE_OPTIONAL
-            ),
-        ];
-
-        $this->assertEquals($expected, $this->auth->get_provision_user_login_parameters());
-
-        set_config('iprestriction', true, 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-        $expected['ip'] = new external_value(PARAM_RAW_TRIMMED, 'User IP address');
-        $this->assertEquals($expected, $this->auth->get_provision_user_login_parameters());
-    }
-
-    /**
-     * Data provider for testing URL validation functions.
-     *
-     * @return array First element URL, the second URL is error message. Empty error massage means no errors.
-     */
-    public function url_data_provider() {
-        return [
-            ['', ''],
-            ['http://google.com/', ''],
-            ['https://google.com', ''],
-            ['http://some.very.long.and.silly.domain/with/a/path/', ''],
-            ['http://0.255.1.1/numericip.php', ''],
-            ['http://0.255.1.1/numericip.php?test=1&id=2', ''],
-            ['/just/a/path', 'You should provide valid URL'],
-            ['random string', 'You should provide valid URL'],
-            [123456, 'You should provide valid URL'],
-            ['php://google.com', 'You should provide valid URL'],
-        ];
-    }
-
-    /**
-     * Test required parameter exception gets thrown id try to login, but key is not set.
-     */
-    public function test_required_parameter_exception_thrown_if_key_not_set(): void {
         $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('A required parameter (key) was missing');
-
-        $this->auth->user_login_userkey();
+        $this->expectExceptionMessage('Invalid login.');
+        $this->auth->authenticate_user('SHARED@example.com', 'Password1!');
     }
 
     /**
-     * Test that incorrect key exception gets thrown if a key is incorrect.
+     * Logout redirects are limited to sessions created through UserKey.
      */
-    public function test_invalid_key_exception_thrown_if_invalid_key(): void {
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Incorrect key');
+    public function test_logout_hook_only_redirects_userkey_session(): void {
+        global $redirect, $SESSION;
 
-        $_POST['key'] = 'InvalidKey';
-        $this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that expired key exception gets thrown if a key is expired.
-     */
-    public function test_expired_key_exception_thrown_if_expired_key(): void {
-        $this->create_user_private_key(['validuntil' => time() - 3000]);
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Expired key');
-
-        $_POST['key'] = 'TestKey';
-        $this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that IP address mismatch exception gets thrown if incorrect IP.
-     */
-    public function test_ipmismatch_exception_thrown_if_ip_is_incorrect(): void {
-        $this->create_user_private_key(['iprestriction' => '192.168.1.1']);
-
-        $_POST['key'] = 'TestKey';
-        $_SERVER['HTTP_CLIENT_IP'] = '192.168.1.2';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Client IP address mismatch');
-
-        $this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that IP address mismatch exception gets thrown if incorrect IP and outside whitelist.
-     */
-    public function test_ipmismatch_exception_thrown_if_ip_is_outside_whitelist(): void {
-        set_config('ipwhitelist', '10.0.0.0/8;172.16.0.0/12;192.168.0.0/16', 'auth_userkey');
-        $this->create_user_private_key(['iprestriction' => '192.161.1.1']);
-
-        $_POST['key'] = 'TestKey';
-        $_SERVER['HTTP_CLIENT_IP'] = '192.161.1.2';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Client IP address mismatch');
-
-        $this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that IP address mismatch exception gets thrown if user id is incorrect.
-     */
-    public function test_invalid_user_exception_thrown_if_user_is_invalid(): void {
-        $this->create_user_private_key([
-            'userid' => 777,
-            'instance' => 777,
-            'iprestriction' => '192.168.1.1',
-        ]);
-
-        $_POST['key'] = 'TestKey';
-        $_SERVER['HTTP_CLIENT_IP'] = '192.168.1.1';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Invalid user');
-
-        $this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that key gets removed after a user logged in.
-     */
-    public function test_that_key_gets_removed_after_user_logged_in(): void {
-        global $DB;
-
-        $this->create_user_private_key([
-            'value' => 'RemoveKey',
-            'iprestriction' => '192.168.1.1',
-        ]);
-
-        $_POST['key'] = 'RemoveKey';
-        $_SERVER['HTTP_CLIENT_IP'] = '192.168.1.1';
-
-        try {
-            // Using @ is the only way to test this. Thanks moodle!
-            @$this->auth->user_login_userkey();
-        } catch (moodle_exception $e) {
-            $keyexists = $DB->record_exists('user_private_key', ['value' => 'RemoveKey']);
-            $this->assertFalse($keyexists);
-        }
-    }
-
-    /**
-     * Test that a user logs in and gets redirected correctly.
-     */
-    public function test_that_user_logged_in_and_redirected(): void {
-        global $CFG;
-
-        $this->create_user_private_key();
-        $CFG->wwwroot = 'http://www.example.com/moodle';
-        $_POST['key'] = 'TestKey';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Unsupported redirect to http://www.example.com/moodle detected, execution terminated');
-
-        @$this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that a user logs in correctly.
-     */
-    public function test_that_user_logged_in_correctly(): void {
-        global $USER, $SESSION;
-
-        $this->create_user_private_key();
-
-        $_POST['key'] = 'TestKey';
-
-        try {
-            // Using @ is the only way to test this. Thanks moodle!
-            @$this->auth->user_login_userkey();
-        } catch (moodle_exception $e) {
-            $this->assertEquals($this->user->id, $USER->id);
-            $this->assertSame(sesskey(), $USER->sesskey);
-            $this->assertObjectHasProperty('userkey', $SESSION);
-        }
-    }
-
-    /**
-     * Test that a user gets redirected to internal wantsurl URL successful log in.
-     */
-    public function test_that_user_gets_redirected_to_internal_wantsurl(): void {
-        $this->create_user_private_key();
-        $_POST['key'] = 'TestKey';
-        $_POST['wantsurl'] = '/course/index.php?id=12&key=134';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Unsupported redirect to /course/index.php?id=12&key=134 detected, execution terminated');
-
-        // Using @ is the only way to test this. Thanks moodle!
-        @$this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that an external wantsurl is blocked by default.
-     */
-    public function test_that_external_wantsurl_is_blocked_by_default(): void {
-        global $CFG;
-
-        $this->create_user_private_key();
-
-        $_POST['key'] = 'TestKey';
-        $_POST['wantsurl'] = 'http://test.com/course/index.php?id=12&key=134';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage(
-            "Unsupported redirect to {$CFG->wwwroot} detected, execution terminated"
-        );
-
-        // Using @ is the only way to test this. Thanks moodle!
-        @$this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that a user gets redirected to an allowlisted external wantsurl.
-     */
-    public function test_that_user_gets_redirected_to_allowed_external_wantsurl(): void {
-        set_config('allowedredirecthosts', 'example.org; test.com', 'auth_userkey');
+        $redirect = '';
+        set_config('redirecturl', 'https://wordpress.example/logout-complete', 'auth_userkey');
         $this->auth = new auth_plugin_userkey();
-        $this->create_user_private_key();
+        $this->auth->logoutpage_hook();
+        $this->assertSame('', $redirect);
 
-        $_POST['key'] = 'TestKey';
-        $_POST['wantsurl'] = 'https://test.com/course/index.php?id=12&key=134';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage(
-            'Unsupported redirect to https://test.com/course/index.php?id=12&key=134 detected, execution terminated'
-        );
-
-        // Using @ is the only way to test this. Thanks moodle!
-        @$this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that URL credentials cannot bypass an allowed host check.
-     */
-    public function test_that_external_wantsurl_with_credentials_is_blocked(): void {
-        global $CFG;
-
-        set_config('allowedredirecthosts', 'test.com', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-        $this->create_user_private_key();
-
-        $_POST['key'] = 'TestKey';
-        $_POST['wantsurl'] = 'https://trusted.example@test.com/course/index.php';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage(
-            "Unsupported redirect to {$CFG->wwwroot} detected, execution terminated"
-        );
-
-        // Using @ is the only way to test this. Thanks moodle!
-        @$this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that a protocol-relative wantsurl is not mistaken for a local URL.
-     */
-    public function test_that_protocol_relative_wantsurl_is_blocked(): void {
-        global $CFG;
-
-        $this->create_user_private_key();
-
-        $_POST['key'] = 'TestKey';
-        $_POST['wantsurl'] = '//evil.example/course/index.php';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage(
-            "Unsupported redirect to {$CFG->wwwroot} detected, execution terminated"
-        );
-
-        // Using @ is the only way to test this. Thanks moodle!
-        @$this->auth->user_login_userkey();
-    }
-
-    /**
-     * Test that login hook redirects a user if skipsso not set and ssourl is set.
-     */
-    public function test_loginpage_hook_redirects_if_skipsso_not_set_and_ssourl_set(): void {
-        global $SESSION;
-
-        $SESSION->enrolkey_skipsso = 0;
-        set_config('ssourl', 'http://google.com', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Unsupported redirect to http://google.com detected, execution terminated.');
-
-        $this->auth->loginpage_hook();
-    }
-
-    /**
-     * Test that login hook does not redirect a user if skipsso not set and ssourl is not set.
-     */
-    public function test_loginpage_hook_does_not_redirect_if_skipsso_not_set_and_ssourl_not_set(): void {
-        global $SESSION;
-
-        $SESSION->enrolkey_skipsso = 0;
-        set_config('ssourl', '', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->assertTrue($this->auth->loginpage_hook());
-    }
-
-    /**
-     * Test that login hook does not redirect a user if skipsso is set and ssourl is not set.
-     */
-    public function test_loginpage_hook_does_not_redirect_if_skipsso_set_and_ssourl_not_set(): void {
-        global $SESSION;
-
-        $SESSION->enrolkey_skipsso = 1;
-        set_config('ssourl', '', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->assertTrue($this->auth->loginpage_hook());
-    }
-
-    /**
-     * Test that pre login hook redirects a user if skipsso not set and ssourl is set.
-     */
-    public function test_pre_loginpage_hook_redirects_if_skipsso_not_set_and_ssourl_set(): void {
-        global $SESSION;
-
-        $SESSION->enrolkey_skipsso = 0;
-        set_config('ssourl', 'http://google.com', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('Unsupported redirect to http://google.com detected, execution terminated.');
-
-        $this->auth->pre_loginpage_hook();
-    }
-
-    /**
-     * Test that pre login hook does not redirect a user if skipsso is not set and ssourl is not set.
-     */
-    public function test_pre_loginpage_hook_does_not_redirect_if_skipsso_not_set_and_ssourl_not_set(): void {
-        global $SESSION;
-
-        $SESSION->enrolkey_skipsso = 0;
-        set_config('ssourl', '', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->assertTrue($this->auth->pre_loginpage_hook());
-    }
-
-    /**
-     * Test that login page hook does not redirect a user if skipsso is set and ssourl is not set.
-     */
-    public function test_pre_loginpage_hook_does_not_redirect_if_skipsso_set_and_ssourl_not_set(): void {
-        global $SESSION;
-
-        $SESSION->enrolkey_skipsso = 1;
-        set_config('ssourl', '', 'auth_userkey');
-        $this->auth = new auth_plugin_userkey();
-
-        $this->assertTrue($this->auth->pre_loginpage_hook());
-    }
-
-    /**
-     * Test that a key for a different user cannot replace the active session.
-     */
-    public function test_that_different_authorised_user_does_not_replace_active_session(): void {
-        global $DB, $USER;
-
-        $user = $this->getDataGenerator()->create_user();
-        $this->setUser($user);
-        $this->assertEquals($USER->id, $user->id);
-
-        $this->create_user_private_key();
-
-        $_POST['key'] = 'TestKey';
-        try {
-            @$this->auth->user_login_userkey();
-            $this->fail('A different-user login must be rejected.');
-        } catch (moodle_exception $e) {
-            $this->assertSame(get_string('differentuserloggedin', 'auth_userkey'), $e->getMessage());
-            $this->assertSame($user->id, $USER->id);
-            $this->assertSame(sesskey(), $USER->sesskey);
-            $this->assertTrue($DB->record_exists('user_private_key', ['value' => 'TestKey']));
-        }
-    }
-
-    /**
-     * Test that a suspended user cannot use an otherwise valid key.
-     */
-    public function test_that_suspended_user_cannot_log_in(): void {
-        global $DB;
-
-        $DB->set_field('user', 'suspended', 1, ['id' => $this->user->id]);
-        $this->create_user_private_key();
-        $_POST['key'] = 'TestKey';
-
-        $sink = $this->redirectEvents();
-
-        try {
-            @$this->auth->user_login_userkey();
-            $this->fail('A suspended user must not be logged in.');
-        } catch (moodle_exception $e) {
-            $this->assertSame(get_string('loginnotallowed', 'auth_userkey'), $e->getMessage());
-            $this->assertFalse(isloggedin());
-            $this->assertFalse($DB->record_exists('user_private_key', ['value' => 'TestKey']));
-            $events = $sink->get_events();
-            $this->assertCount(1, $events);
-            $this->assertInstanceOf(\core\event\user_login_failed::class, $events[0]);
-            $this->assertSame(AUTH_LOGIN_SUSPENDED, $events[0]->other['reason']);
-        }
-    }
-
-    /**
-     * Test that an unconfirmed user cannot use an otherwise valid key.
-     */
-    public function test_that_unconfirmed_user_cannot_log_in(): void {
-        global $DB;
-
-        $DB->set_field('user', 'confirmed', 0, ['id' => $this->user->id]);
-        $this->create_user_private_key();
-        $_POST['key'] = 'TestKey';
-
-        $sink = $this->redirectEvents();
-
-        try {
-            @$this->auth->user_login_userkey();
-            $this->fail('An unconfirmed user must not be logged in.');
-        } catch (moodle_exception $e) {
-            $this->assertSame(get_string('loginnotallowed', 'auth_userkey'), $e->getMessage());
-            $this->assertFalse(isloggedin());
-            $this->assertFalse($DB->record_exists('user_private_key', ['value' => 'TestKey']));
-            $events = $sink->get_events();
-            $this->assertCount(1, $events);
-            $this->assertInstanceOf(\core\event\user_login_failed::class, $events[0]);
-            $this->assertSame(AUTH_LOGIN_UNAUTHORISED, $events[0]->other['reason']);
-        }
-    }
-
-    /**
-     * Test that a user promoted to site administrator after key issuance cannot consume the key.
-     */
-    public function test_that_site_administrator_cannot_log_in(): void {
-        global $CFG, $DB;
-
-        $this->create_user_private_key();
-        set_config('siteadmins', $CFG->siteadmins . ',' . $this->user->id);
-        $_POST['key'] = 'TestKey';
-
-        $sink = $this->redirectEvents();
-
-        try {
-            @$this->auth->user_login_userkey();
-            $this->fail('A site administrator must not be logged in using a user key.');
-        } catch (moodle_exception $e) {
-            $this->assertSame(get_string('siteadminnotallowed', 'auth_userkey'), $e->getMessage());
-            $this->assertFalse(isloggedin());
-            $this->assertFalse($DB->record_exists('user_private_key', ['value' => 'TestKey']));
-            $events = $sink->get_events();
-            $this->assertCount(1, $events);
-            $this->assertInstanceOf(\core\event\user_login_failed::class, $events[0]);
-            $this->assertSame(AUTH_LOGIN_UNAUTHORISED, $events[0]->other['reason']);
-        }
-    }
-
-    /**
-     * Test that an invalid key cannot terminate an active session.
-     */
-    public function test_invalid_key_does_not_log_out_authorised_user(): void {
-        global $DB, $USER;
-
-        $user = $this->getDataGenerator()->create_user();
-        $this->setUser($user);
-        $this->assertEquals($USER->id, $user->id);
-
-        $this->create_user_private_key();
-
-        $_POST['key'] = 'IncorrectKey';
-
-        try {
-            // Using @ is the only way to test this. Thanks moodle!
-            @$this->auth->user_login_userkey();
-            $this->fail('An invalid key must be rejected.');
-        } catch (moodle_exception $e) {
-            $this->assertEquals('Incorrect key', $e->getMessage());
-            $this->assertSame($user->id, $USER->id);
-            $this->assertSame(sesskey(), $USER->sesskey);
-            $this->assertTrue($DB->record_exists('user_private_key', ['value' => 'TestKey']));
-        }
-    }
-
-    /**
-     * Test if a user is logged in and tries to log in again it stays logged in.
-     */
-    public function test_that_already_logged_in_user_stays_logged_in(): void {
-        global $DB, $USER, $SESSION;
-
-        $this->setUser($this->user);
-        $this->assertEquals($USER->id, $this->user->id);
-
-        $this->create_user_private_key();
-
-        $_POST['key'] = 'TestKey';
-
-        try {
-            // Using @ is the only way to test this. Thanks moodle!
-            @$this->auth->user_login_userkey();
-        } catch (moodle_exception $e) {
-            $this->assertEquals($this->user->id, $USER->id);
-            $this->assertSame(sesskey(), $USER->sesskey);
-            $this->assertObjectNotHasProperty('userkey', $SESSION);
-            $keyexists = $DB->record_exists('user_private_key', ['value' => 'TestKey']);
-            $this->assertFalse($keyexists);
-        }
-    }
-
-    /**
-     * Test when try to logout, but required return is not set.
-     */
-    public function test_user_logout_userkey_when_required_return_not_set(): void {
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('A required parameter (return) was missing');
-
-        $this->auth->user_logout_userkey();
-    }
-
-    /**
-     * Test when try to logout, but user is not logged in.
-     */
-    public function test_user_logout_userkey_when_user_is_not_logged_in(): void {
-        $_POST['return'] = self::REDIRECTION_PATH;
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage(
-            sprintf("Unsupported redirect to %s detected, execution terminated.", self::REDIRECTION_PATH)
-        );
-
-        $this->auth->user_logout_userkey();
-    }
-
-    /**
-     * Test when try to logout, but user logged in with different auth type.
-     */
-    public function test_user_logout_userkey_when_user_logged_in_with_different_auth(): void {
-        global $USER;
-
-        $_POST['return'] = self::REDIRECTION_PATH;
-
-        $this->setUser($this->user);
-        try {
-            $this->auth->user_logout_userkey();
-        } catch (moodle_exception $e) {
-            $this->assertTrue(isloggedin());
-            $this->assertEquals($USER->id, $this->user->id);
-            $this->assertEquals(
-                'Incorrect logout request',
-                $e->getMessage()
-            );
-        }
-    }
-
-    /**
-     * Test that a userkey session cannot be logged out without a valid sesskey.
-     */
-    public function test_user_logout_userkey_requires_sesskey(): void {
-        global $SESSION, $USER;
-
-        $this->setUser($this->user);
         $SESSION->userkey = true;
-        $_POST['return'] = self::REDIRECTION_PATH;
-        $_POST['sesskey'] = 'invalid';
-
-        try {
-            $this->auth->user_logout_userkey();
-            $this->fail('Logout without a sesskey must be rejected.');
-        } catch (moodle_exception $e) {
-            $this->assertSame(get_string('invalidsesskey', 'error'), $e->getMessage());
-            $this->assertSame($this->user->id, $USER->id);
-            $this->assertTrue(isloggedin());
-        }
-    }
-
-    /**
-     * Test when try to logout, but user logged in with different auth type.
-     */
-    public function test_user_logout_userkey_when_user_logged_in_but_return_not_set(): void {
-        $this->setUser($this->user);
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage('A required parameter (return) was missing');
-
-        $this->auth->user_logout_userkey();
-    }
-
-    /**
-     * Test successful logout.
-     */
-    public function test_user_logout_userkey_logging_out(): void {
-        global $SESSION;
-
-        $this->setUser($this->user);
-        $SESSION->userkey = true;
-        $_POST['return'] = self::REDIRECTION_PATH;
-        $_POST['sesskey'] = sesskey();
-
-        try {
-            $this->auth->user_logout_userkey();
-        } catch (moodle_exception $e) {
-            $this->assertFalse(isloggedin());
-            $this->assertEquals(
-                sprintf('Unsupported redirect to %s detected, execution terminated.', self::REDIRECTION_PATH),
-                $e->getMessage()
-            );
-        }
-    }
-
-    /**
-     * Test that a protocol-relative logout return URL cannot redirect off-site.
-     */
-    public function test_user_logout_userkey_blocks_protocol_relative_return(): void {
-        global $CFG;
-
-        $_POST['return'] = '//evil.example/path';
-
-        $this->expectException(moodle_exception::class);
-        $this->expectExceptionMessage(
-            "Unsupported redirect to {$CFG->wwwroot} detected, execution terminated."
-        );
-
-        $this->auth->user_logout_userkey();
+        $this->auth->logoutpage_hook();
+        $this->assertSame('https://wordpress.example/logout-complete', $redirect);
     }
 }

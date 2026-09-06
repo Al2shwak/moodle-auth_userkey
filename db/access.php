@@ -25,8 +25,16 @@
 defined('MOODLE_INTERNAL') || die();
 
 $capabilities = [
-    'auth/userkey:createuser' => [
+    'auth/userkey:registeruser' => [
         'riskbitmask' => RISK_PERSONAL | RISK_SPAM | RISK_CONFIG | RISK_DATALOSS,
+
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => [
+        ],
+    ],
+    'auth/userkey:authenticate' => [
+        'riskbitmask' => RISK_PERSONAL,
 
         'captype' => 'write',
         'contextlevel' => CONTEXT_SYSTEM,
@@ -35,6 +43,14 @@ $capabilities = [
     ],
     'auth/userkey:generatekey' => [
         'riskbitmask' => RISK_PERSONAL | RISK_SPAM | RISK_XSS | RISK_CONFIG | RISK_DATALOSS,
+
+        'captype' => 'write',
+        'contextlevel' => CONTEXT_SYSTEM,
+        'archetypes' => [
+        ],
+    ],
+    'auth/userkey:resetpassword' => [
+        'riskbitmask' => RISK_PERSONAL | RISK_SPAM,
 
         'captype' => 'write',
         'contextlevel' => CONTEXT_SYSTEM,

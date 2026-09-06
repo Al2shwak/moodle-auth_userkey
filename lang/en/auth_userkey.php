@@ -23,22 +23,26 @@
  */
 
 defined('MOODLE_INTERNAL') || die;
+$string['accountalreadyexists'] = 'An account already exists for this email address.';
+$string['allowedauthmethods'] = 'Allowed authentication methods for SSO';
+$string['allowedauthmethods_desc'] = 'Accounts must use one of these enabled authentication methods to validate '
+    . 'credentials or receive a one-time login URL. Only methods that implement Moodle password authentication are '
+    . 'listed. Manual and email authentication are the recommended defaults. An empty selection denies all accounts.';
 $string['allowedredirecthosts'] = 'Allowed redirect hosts';
 $string['allowedredirecthosts_desc'] = 'External hosts that users may be redirected to after key-based authentication. '
     . 'Enter host names only, separated by semicolons, commas, or new lines. Leave empty to allow local Moodle URLs only.';
 $string['auth_userkeydescription'] = 'Log in to Moodle using one time user key.';
-$string['createuser'] = 'Create user?';
-$string['createuser_desc'] = 'If enabled, the provisioning web service can create a new user and return a one-time '
-    . 'login URL. The ordinary login web service never creates users.';
-$string['createusercohortoption'] = '{$a->name} (ID: {$a->id})';
-$string['createusercohorts'] = 'Cohorts for newly created users';
-$string['createusercohorts_desc'] = 'Add users created by this plugin to the selected cohorts. Existing users are never '
-    . 'added. Cohort membership may also enrol users in courses that use cohort sync.';
+$string['authmethodnotallowed'] = 'This account authentication method is not allowed for SSO.';
 $string['differentuserloggedin'] = 'A different user is already logged in. Log out before using this login link.';
+$string['emailauthdisabled'] = 'Email-based authentication is disabled.';
 $string['incorrectkeylifetime'] = 'User key life time should be a number';
 $string['incorrectlogout'] = 'Incorrect logout request';
 $string['incorrectredirecturl'] = 'You should provide valid URL';
 $string['incorrectssourl'] = 'You should provide valid URL';
+$string['invalidauthentication'] = 'Invalid login.';
+$string['invalidcustomfield'] = 'A custom profile field is unknown, duplicated, or unavailable during signup.';
+$string['invalidregistrationdata'] = 'The registration data is incomplete or invalid.';
+$string['invalidregistrationmode'] = 'The configured registration authentication and confirmation mode is invalid.';
 $string['iprestriction'] = 'IP restriction';
 $string['iprestriction_desc'] = 'If enabled, a web call has to contain "ip" parameter when requesting login URL.
 A user has to have provided IP to be able to use a key to login to LMS.';
@@ -49,21 +53,27 @@ $string['ipwhitelist_desc'] = "Ignore IP restrictions if the IP address the toke
 $string['keylifetime'] = 'User key life time';
 $string['keylifetime_desc'] = 'Life time in seconds of the each user login key.';
 $string['loginnotallowed'] = 'Login is not allowed for this account.';
-$string['mappingfield'] = 'Mapping field';
-$string['mappingfield_desc'] = 'This user field will be used to find relevant user in the LMS.';
+$string['missingcustomfield'] = 'Required custom profile field "{$a}" is missing.';
 $string['noip'] = 'Unable to fetch IP address of client.';
+$string['passwordresetrequestaccepted'] = 'If an eligible account exists, Moodle will send password-reset instructions.';
 $string['pluginisdisabled'] = 'The userkey authentication plugin is disabled.';
 $string['pluginname'] = 'User key authentication';
 $string['privacy:metadata'] = 'User key authentication plugin does not store any personal data.';
 $string['redirecterrordetected'] = 'Unsupported redirect to {$a} detected, execution terminated.';
 $string['redirecturl'] = 'Logout redirect URL';
 $string['redirecturl_desc'] = 'Optionally you can redirect users to this URL after they logged out from LMS.';
+$string['registrationauthdisabled'] = 'The selected registration authentication method "{$a}" is disabled.';
+$string['registrationmode'] = 'Registration authentication and confirmation';
+$string['registrationmode_desc'] = 'Controls the authentication method assigned to newly registered accounts and '
+    . 'who confirms them. Existing accounts are not changed. Manual registrations still require email ownership '
+    . 'confirmation before login.';
+$string['registrationmode_email'] = 'Email-based — user confirms by email';
+$string['registrationmode_emailadmin'] = 'Email-based — administrator confirms in Moodle';
+$string['registrationmode_manual'] = 'Manual — user confirms by email';
 $string['siteadminnotallowed'] = 'Login keys cannot be generated or used for site administrators.';
 $string['ssourl'] = 'URL of SSO host';
 $string['ssourl_desc'] = 'URL of the SSO host to redirect users to. If defined users will be redirected here on login instead of the Moodle Login page';
-$string['updateuser'] = 'Update user?';
-$string['updateuser_desc'] = 'If enabled, existing users will be updated with the properties supplied when the webservice is called, and their authentication method will be changed to User key authentication. Site administrators are never updated.';
-$string['usercreationdisabled'] = 'User creation is disabled.';
-$string['userid'] = 'User ID';
-$string['userkey:createuser'] = 'Create users through User key provisioning';
+$string['userkey:authenticate'] = 'Validate Moodle user credentials';
 $string['userkey:generatekey'] = 'Generate login user key';
+$string['userkey:registeruser'] = 'Register unconfirmed Moodle users';
+$string['userkey:resetpassword'] = 'Request Moodle password-reset emails';

@@ -1,276 +1,263 @@
-<a href="https://github.com/Al2shwak/moodle-auth_userkey/actions/workflows/ci.yml?query=branch%3AMOODLE_502_STABLE">
-<img src="https://github.com/Al2shwak/moodle-auth_userkey/actions/workflows/ci.yml/badge.svg?branch=MOODLE_502_STABLE">
-</a>
-
-Log in to Moodle using one time user key.
-=========================================
-
-Auth plugin for organising simple one way SSO(single sign on) between moodle and your external web
-application. The main idea is to make a web call to moodle and provide one of the possible matching
-fields to find required user and generate one time login URL. A user can be redirected to this
-URL to be log in to Moodle without typing username and password.
-
-# Versions and branches
-
-| Moodle Version   | Branch            |
-|------------------|-------------------|
-| Moodle 4.5 - 5.2 | MOODLE_502_STABLE |
-| Moodle 3.3 - 4.1 | MOODLE_33PLUS     |
-
-Using
------
-1. Install the plugin as usual.
-2. Enable the userkey authentication plugin (Site administration -> Plugins -> Authentication and then enable User key).
-3. Configure the plugin. Set the mapping field, user key lifetime, IP restriction, and redirect settings.
-4. Enable the web services advanced feature (Site administration > General > Advanced features). See [Web services](https://docs.moodle.org/en/Web_services).
-5. Enable one of the supported protocols (Site administration > Server > Web services > Manage protocols).
-6. Create a token for a specific user and for the service 'User key authentication web service' (Site administration > Server > Web services > Manage tokens).
-7. Make sure that the web service user has the `auth/userkey:generatekey` capability. If the integration will
-   register users, grant the same user `auth/userkey:createuser` as well.
-8. Authorise the web service user (Site administration > Server > Web services > External services > Authorised users).
-9. Configure your external application to request a login URL.
-10. Redirect the user to the returned URL.
-
-The `auth/userkey:generatekey` capability permits impersonating any eligible Moodle user, including
-privileged non-administrator accounts. Site administrators are excluded from key-based login and must use
-another configured Moodle authentication method. Grant this capability only to a dedicated, tightly controlled
-web-service account and protect its token as a privileged credential.
-
-The same restricted service and token can call all bundled functions. Granting `auth/userkey:createuser` makes
-that token capable of creating confirmed accounts and should therefore be limited to a trusted server-side
-integration.
-
-Configuration
--------------
-
-**Mapping field**
-
-Required data structure for web call is related to mapping field you configured.
-
-For example XML-RPC (PHP structure) description for different mapping field settings:
-
-***User name***
-
-    [user] =>
-        Array
-            (
-            [username] => string
-            )
-
-***Email Address***
-
-    [user] =>
-        Array
-            (
-            [email] => string
-            )
-
-***ID number***
-
-    [user] =>
-        Array
-            (
-            [idnumber] => string
-            )
-
-***Database Id***
-
-    [user] =>
-        Array
-            (
-            [id] => int
-            )
-
-***Web service will return following structure or standard Moodle webservice error message.***
-
-    Array
-        (
-        [loginurl] => string
-        )
-
-`auth_userkey_request_login_url` only logs in an existing user. It never creates a missing account, even when
-**Create user?** is enabled. If **Update user?** is enabled, it retains the existing update-on-login behaviour.
-
-Please navigate to API documentation to get the full description for the external functions.
-e.g. http://yourmoodle.com/admin/webservice/documentation.php
-
-The bundled restricted service also exposes Moodle's read-only `core_webservice_get_site_info` function. This
-allows the Hawza WordPress bridge to validate the service token and confirm that the User Key function is
-available without requesting a login URL or generating a one-time key.
-
-**Provision and log in a new user**
-
-`auth_userkey_provision_user_login` creates a new user and returns that user's first one-time login URL in one
-call. It requires both `auth/userkey:createuser` and `auth/userkey:generatekey`, and the **Create user?** setting
-must be enabled. Existing usernames and email addresses are rejected rather than treated as login requests.
-
-Required user fields are `username`, `email`, `firstname`, and `lastname`. The optional `idnumber` field and
-Moodle custom user profile fields are supported. Custom fields use Moodle's standard structure:
-
-    [user] =>
-        Array
-            (
-            [username] => newstudent
-            [email] => newstudent@example.com
-            [firstname] => New
-            [lastname] => Student
-            [customfields] => Array
-                (
-                [0] => Array
-                    (
-                    [type] => membershiptype
-                    [value] => sponsored
-                    )
-                )
-            )
-
-For REST requests, the equivalent custom-field parameters are
-`user[customfields][0][type]=membershiptype` and `user[customfields][0][value]=sponsored`. The `type` value is
-the custom profile field short name configured in Moodle.
-
-You can amend login URL by "wantsurl" parameter to redirect user after they logged in to Moodle.
-
-E.g. http://yourmoodle.com/auth/userkey/login.php?key=uniquekey&wantsurl=http://yourmoodle.com/course/view.php?id=3
-
-The `wantsurl` parameter may point to a local Moodle URL. External HTTP(S) URLs are accepted only when their host is explicitly listed in the **Allowed redirect hosts** setting. Multiple hosts may be separated by semicolons, commas, or new lines. Enter host names without a protocol or path, for example `portal.example.com;app.example.org`.
-
-An invalid or unapproved destination falls back to the Moodle site URL.
-
-**Update existing users**
-
-When enabled, profile fields supplied by the external service are applied to an existing user and that user's
-authentication method is changed to **User key authentication**. This can be used as part of an intentional
-account migration. Site administrators are excluded from this process and continue to use their existing Moodle
-authentication method.
-
-**Cohorts for newly created users**
-
-When **Create user?** is enabled, `auth_userkey_provision_user_login` can add each account it creates to one or
-more selected Moodle cohorts. This applies only at account creation; requesting a key for an existing user or
-updating an existing user does not change their cohort memberships. Deleted cohorts left in an older saved
-configuration are skipped.
-
-Adding a user to a cohort can also enrol that user into courses configured with Moodle's cohort sync enrolment
-method. Treat this setting as part of the access granted to accounts created through the SSO web service.
-
-
-**User key life time**
-
-This setting describes for how long a user key will be valid. If you try to use expired key then you will
-get an error.
-
-**IP restriction**
-
-If this setting is set to yes, then your web application has to provie user's ip address to generate a user key. Then
-the user should have provided ip when using this key. If ip address is different a user will get an error.
-
-**Redirect after logout from Moodle**
-
-You can set URL to redirect users after they logged out from Moodle. For example you can redirect them
-to logout script of your web application to log users out from it as well. This setting is optional.
-
-**URL of SSO host**
-
-You can set URL to redirect users before they see Moodle login page. For example you can redirect them
-to your web application to login page. You can use "enrolkey_skipsso" URL parameter to bypass this option.
-E.g. http://yourmoodle.com/login/index.php?enrolkey_skipsso=1
-
-**Logout URL**
-
-To log out a userkey-authenticated session through the plugin endpoint, send the user to the logout script
-with the required local `return` URL and the current Moodle `sesskey` CSRF token.
-
-E.g. http://yourmoodle.com/auth/userkey/logout.php?return=/login/index.php&sesskey=users-session-key
-
-
-Users will be logged out from Moodle and then redirected to the provided local Moodle URL. A logged-in
-user is not logged out when the `sesskey` is missing or invalid.
-In case when a user session is already expired, the user will be still redirected.
-
-
-**Example client**
-
-**Note:** the code below is not for production use. It's just a quick and dirty way to test the functionality.
-
-The code below defines a function that can be used to obtain a login URL for an existing user. You will need to
-add or remove profile parameters depending on whether updating is enabled and which mapping field you are using.
-
-The required library curl can be obtained from https://github.com/moodlehq/sample-ws-clients
-```php
-/**
- * @param   string $useremail Email address of user to create token for.
- * @param   string $firstname First name of user (used only when updating is enabled).
- * @param   string $lastname Last name of user (used only when updating is enabled).
- * @param   string $username Username of user (used for mapping or optional updating).
- * @param   string $ipaddress IP address of end user that login request will come from (probably $_SERVER['REMOTE_ADDR']).
- * @param int      $courseid Course id to send logged in users to, defaults to site home.
- * @param int      $modname Name of course module to send users to, defaults to none.
- * @param int      $activityid cmid to send logged in users to, defaults to site home.
- * @return bool|string
- */
-function getloginurl($useremail, $firstname, $lastname, $username, $courseid = null, $modname = null, $activityid = null) {
-    require_once('curl.php');
-
-    $token        = 'YOUR_TOKEN';
-    $domainname   = 'http://MOODLE_WWW_ROOT';
-    $functionname = 'auth_userkey_request_login_url';
-
-    $param = [
-        'user' => [
-            'firstname' => $firstname, // Not needed if you are not updating users.
-            'lastname'  => $lastname, // Not needed if you are not updating users.
-            'username'  => $username,
-            'email'     => $useremail,
-        ]
-    ];
-
-    $serverurl = $domainname . '/webservice/rest/server.php' . '?wstoken=' . $token . '&wsfunction=' . $functionname . '&moodlewsrestformat=json';
-    $curl = new curl; // The required library curl can be obtained from https://github.com/moodlehq/sample-ws-clients
-
-    try {
-        $resp     = $curl->post($serverurl, $param);
-        $resp     = json_decode($resp);
-        if ($resp && !empty($resp->loginurl)) {
-            $loginurl = $resp->loginurl;
-        }
-    } catch (Exception $ex) {
-        return false;
-    }
-
-    if (!isset($loginurl)) {
-        return false;
-    }
-
-    $path = '';
-    if (isset($courseid)) {
-        $path = '&wantsurl=' . urlencode("$domainname/course/view.php?id=$courseid");
-    }
-    if (isset($modname) && isset($activityid)) {
-        $path = '&wantsurl=' . urlencode("$domainname/mod/$modname/view.php?id=$activityid");
-    }
-
-    return $loginurl . $path;
-}
-
-echo getloginurl('barrywhite@googlemail.com', 'barry', 'white', 'barrywhite', 2, 'certificate', 8);
+# Moodle UserKey registration and SSO bridge
+
+This authentication plugin provides a restricted REST bridge for WordPress registration, Moodle credential
+validation, and one-time browser SSO. Moodle remains the owner of user passwords and email confirmation.
+
+Supported Moodle versions: **4.5 through 5.2**.
+
+## Security model
+
+- One restricted Moodle web-service account and one token may call the complete integration service.
+- Registration creates an unconfirmed `auth=email` or `auth=manual` account according to the configured registration
+  mode. The normalized lowercase email is both the username and email address.
+- Moodle hashes the password. User-confirmed modes send Moodle's confirmation email; administrator-confirmed mode
+  sends no confirmation link to the user. Passwords are never returned by the API.
+- Confirmation does not log the browser into Moodle. It redirects the browser to the configured WordPress SSO URL.
+- Credential validation uses Moodle's normal authentication and lockout handling, but creates no browser session.
+  Both credential validation and login-link generation enforce the configured authentication-method allowlist.
+- One-time login links are issued only by immutable Moodle user ID. The request cannot create or edit a user or
+  change an authentication method.
+- Guests, deleted, suspended, unconfirmed, `nologin`, and site-administrator accounts cannot authenticate or
+  receive UserKey links.
+- WordPress must keep the Moodle token server-side and use HTTPS for every request.
+
+Registration and payment are independent. WordPress may begin checkout immediately with the returned `userid`,
+and may add an unconfirmed user to a paid cohort. WordPress must require both account confirmation and active payment
+before requesting and sending the browser through a UserKey login URL.
+
+## Installation
+
+1. Build or download the release ZIP. Its top-level directory must be `userkey`.
+2. In Moodle, install it through **Site administration > Plugins > Install plugins**, or extract it to
+   `auth/userkey` and run the Moodle upgrade.
+3. Under **Manage authentication**, enable the **User key authentication** and **Email-based self-registration**
+   authentication methods (open their eye icons).
+4. In that same page, keep the **Self registration** dropdown set to **Disable**. Enabling the email authentication
+   method does not require making Moodle's public registration form available.
+5. Configure Moodle outbound email and disable duplicate email addresses.
+6. In the UserKey settings, choose **Registration authentication and confirmation**. The recommended default is
+   **Email-based — user confirms by email**. Keep **Allowed authentication methods for SSO** set to `manual` and
+   `email` unless a different password-capable Moodle method has been deliberately tested. Configure the key lifetime
+   and the WordPress/Avada login page as **URL of SSO host**. Configure logout and redirect hosts if needed.
+7. Enable REST under **Advanced features** and **Manage protocols**.
+
+## Service account and token
+
+The plugin installs the restricted service **User key authentication web service** with shortname
+`auth_userkey`. Add one dedicated, non-administrator service user and create one token for that service.
+
+Create a system role with no archetype and grant only:
+
+- `auth/userkey:registeruser`
+- `auth/userkey:authenticate`
+- `auth/userkey:resetpassword`
+- `auth/userkey:generatekey`
+- `moodle/cohort:assign`
+- the REST protocol capability required by your Moodle configuration
+
+Assign the role to the service user in the system context. The plugin capabilities intentionally have no default
+role archetypes.
+
+The service contains:
+
+| Function | Purpose |
+| --- | --- |
+| `auth_userkey_get_registration_fields` | Password policy text and signup-enabled profile field metadata |
+| `auth_userkey_register_user` | Create an unconfirmed account using the configured registration mode |
+| `auth_userkey_authenticate_user` | Validate Moodle credentials and return immutable identity |
+| `auth_userkey_request_password_reset` | Ask Moodle to send its native password-reset email |
+| `auth_userkey_request_login_url` | Create a one-time browser SSO URL for a Moodle user ID |
+| `core_cohort_add_cohort_members` | Activate paid cohort access |
+| `core_cohort_delete_cohort_members` | Revoke paid cohort access |
+| `core_webservice_get_site_info` | Validate the token and integration |
+
+## REST requests
+
+POST requests use:
+
+```text
+https://moodle.example.com/webservice/rest/server.php
 ```
 
+Include `wstoken=SERVER_SIDE_TOKEN`, `moodlewsrestformat=json`, and the relevant `wsfunction` in every request.
+The examples below show form-encoded field names; JSON response bodies are shown beneath them.
 
-# Crafted by Catalyst IT
+### Discover registration fields
 
-This plugin was developed by Catalyst IT Australia:
+```text
+wsfunction=auth_userkey_get_registration_fields
+```
 
-https://www.catalyst-au.net/
+```json
+{
+  "passwordpolicy": "Password policy description from Moodle",
+  "customfields": [
+    {
+      "type": "membershiptype",
+      "name": "Membership type",
+      "datatype": "text",
+      "required": true,
+      "locked": false,
+      "forceunique": false,
+      "defaultvalue": "",
+      "settings": [
+        {"name": "param1", "value": "30"},
+        {"name": "param2", "value": "2048"}
+      ]
+    }
+  ]
+}
+```
 
-![Catalyst IT](/pix/catalyst-logo.png?raw=true)
+WordPress should call this during configuration and render only fields returned by Moodle. Custom fields that are
+not both visible and enabled for signup are rejected by registration.
 
-# Contributing and Support
+### Register
 
-Issues, and pull requests using github are welcome and encouraged!
+```text
+wsfunction=auth_userkey_register_user
+user[email]=student@example.com
+user[password]=the plaintext password over HTTPS
+user[firstname]=Student
+user[lastname]=Example
+user[city]=Kuwait City
+user[country]=KW
+user[customfields][0][type]=membershiptype
+user[customfields][0][value]=student
+```
 
-https://github.com/catalyst/moodle-auth_userkey/issues
+`city`, `country`, and `customfields` are optional unless Moodle profile-field configuration makes a custom field
+required.
 
-If you would like commercial support or would like to sponsor additional improvements
-to this plugin please contact us:
+```json
+{
+  "userid": 123,
+  "username": "student@example.com",
+  "confirmationrequired": true,
+  "authmethod": "email",
+  "confirmationmethod": "email"
+}
+```
 
-https://www.catalyst-au.net/contact-us
+Store `userid` only in WordPress's server-side registration/payment context. Do not store or log the password.
+The response identifies the actual Moodle authentication method and whether confirmation belongs to the user or an
+administrator. In a user-confirmed mode, Moodle sends the confirmation message. Its link confirms the user and
+returns the browser to the configured SSO URL with `emailconfirmed=1`; it does not log the user into Moodle.
+
+Registration modes affect only accounts created after the setting is saved:
+
+- **Email-based — user confirms by email:** creates `auth=email`, sends a confirmation link, and is the default.
+- **Email-based — administrator confirms in Moodle:** creates `auth=email` without sending a confirmation link. An
+  administrator confirms the pending account under **Site administration > Users > Accounts > Browse list of users**.
+- **Manual — user confirms by email:** creates `auth=manual` and sends a confirmation link through this plugin.
+
+All three modes create an initially unconfirmed account, so registration alone never permits authentication or SSO.
+Administrator confirmation does not itself prove that the registrant controls the supplied email address. Use that
+mode only when administrators have a separate identity-verification process before confirming accounts.
+
+### Authenticate
+
+```text
+wsfunction=auth_userkey_authenticate_user
+identifier=student@example.com
+password=the plaintext password over HTTPS
+```
+
+The identifier may be the Moodle username or a unique email address. The account's authentication method must be
+selected in the plugin allowlist. Every invalid password, unknown user, or ineligible account produces the same
+`Invalid login.` error.
+
+```json
+{
+  "userid": 123,
+  "username": "student@example.com"
+}
+```
+
+### Request a password reset
+
+```text
+wsfunction=auth_userkey_request_password_reset
+email=student@example.com
+```
+
+Moodle sends its native password-reset email when an eligible account exists. WordPress must display the same
+message for every request and must not infer account existence from timing or email delivery.
+
+```json
+{
+  "accepted": true,
+  "message": "If an eligible account exists, Moodle will send password-reset instructions."
+}
+```
+
+The endpoint deliberately returns the same response for unknown, unconfirmed, suspended, unsupported, and
+eligible accounts. Following Moodle's native behavior, an unconfirmed email-auth account receives another account
+confirmation email instead of a password-reset token. Moodle's normal reset-token lifetime and repeat-request
+limits still apply. If Moodle has an alternate forgotten-password URL configured, this endpoint does not bypass it
+or send a Moodle reset email.
+
+### Request one-time SSO URL
+
+```text
+wsfunction=auth_userkey_request_login_url
+user[id]=123
+```
+
+If IP restriction is enabled, also send `user[ip]` with the browser's actual IP address.
+
+```json
+{
+  "loginurl": "https://moodle.example.com/auth/userkey/login.php?key=..."
+}
+```
+
+Send the browser to the URL immediately. It is a short-lived bearer credential and must never be logged, emailed,
+cached, exposed to analytics, or fetched speculatively. It is invalidated after use.
+
+### Cohort access
+
+Grant access after successful payment:
+
+```text
+wsfunction=core_cohort_add_cohort_members
+members[0][cohorttype][type]=id
+members[0][cohorttype][value]=42
+members[0][usertype][type]=id
+members[0][usertype][value]=123
+```
+
+Revoke access after expiry, cancellation, or refund with:
+
+```text
+wsfunction=core_cohort_delete_cohort_members
+members[0][cohortid]=42
+members[0][userid]=123
+```
+
+Payment activation idempotency belongs in WordPress.
+
+## Existing-user migration
+
+This release does not modify existing Moodle accounts. Existing users of an allowed password-capable method can
+validate their current Moodle credentials and then use ID-based SSO. The secure default allows `manual` and
+confirmed `email` users. Existing `auth=userkey` accounts are deliberately not converted because they may not have
+usable Moodle passwords.
+
+Before a later migration, administrators should report and manually review those accounts:
+
+```sql
+SELECT id, username, email, confirmed, suspended
+  FROM mdl_user
+ WHERE auth = 'userkey' AND deleted = 0;
+```
+
+Do not change their `auth` field in bulk until a password-setup and ownership-verification flow is ready.
+
+## Development and release
+
+`build-release.command` creates a reproducible ZIP from the current committed revision under `dist/` and prints
+its SHA-256 checksum. It refuses to package uncommitted tracked changes.
+
+The plugin version upgrade removes obsolete `mappingfield`, `createuser`, `createusercohorts`, `updateuser`, and
+legacy UserKey profile-lock settings. It does not change any user records.
