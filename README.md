@@ -1,5 +1,7 @@
 # Moodle UserKey registration and SSO bridge
 
+[![ci](https://github.com/Al2shwak/moodle-auth_userkey/actions/workflows/ci.yml/badge.svg?branch=MOODLE_502_STABLE)](https://github.com/Al2shwak/moodle-auth_userkey/actions/workflows/ci.yml)
+
 This authentication plugin provides a restricted REST bridge for WordPress registration, Moodle credential
 validation, and one-time browser SSO. Moodle remains the owner of user passwords and email confirmation.
 
@@ -143,6 +145,8 @@ Store `userid` only in WordPress's server-side registration/payment context. Do 
 The response identifies the actual Moodle authentication method and whether confirmation belongs to the user or an
 administrator. In a user-confirmed mode, Moodle sends the confirmation message. Its link confirms the user and
 returns the browser to the configured SSO URL with `emailconfirmed=1`; it does not log the user into Moodle.
+The query parameter is only a user-interface notification. WordPress must never trust it as proof of confirmation;
+it must validate the user's credentials successfully before requesting a one-time login URL.
 
 Registration modes affect only accounts created after the setting is saved:
 
@@ -253,6 +257,26 @@ SELECT id, username, email, confirmed, suspended
 ```
 
 Do not change their `auth` field in bulk until a password-setup and ownership-verification flow is ready.
+
+## Production operations
+
+- Keep the Moodle REST token exclusively in server-side WordPress configuration. Never expose it in browser code,
+  form markup, logs, support messages, or analytics.
+- Use HTTPS for Moodle, WordPress, confirmation links, and every REST call. Keep the one-time key lifetime short.
+- Use a dedicated non-administrator service account with only the capabilities listed above. Rotate its token after
+  any suspected disclosure and update WordPress immediately.
+- Configure and monitor Moodle outbound email. Test registration, confirmation, and password reset after mail or
+  DNS changes.
+- Apply WordPress-side rate limiting and bot protection to registration, authentication, and password-reset forms.
+- Bookmark and test the local Moodle login bypass before enabling the SSO host URL:
+  `https://moodle.example.com/login/index.php?enrolkey_skipsso=1`. This suppresses the SSO redirect for that browser
+  session, allowing administrators to use Moodle credentials. It bypasses only the redirect, not authentication.
+- Restrict access to the local-login bypass URL operationally if desired, but do not treat the parameter itself as
+  an access control. Anyone who knows the URL can display the Moodle login form and must still provide valid Moodle
+  credentials.
+- Back up Moodle before plugin upgrades and verify the integration with `core_webservice_get_site_info` afterward.
+- Periodically review pending unconfirmed accounts, the service user's role assignment, enabled authentication
+  methods, and the plugin's SSO allowlist.
 
 ## Development and release
 

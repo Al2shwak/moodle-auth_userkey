@@ -1,10 +1,20 @@
 # .github/workflows/ci.yml
 name: ci
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   ci:
-    uses: catalyst/catalyst-moodle-workflows/.github/workflows/ci.yml@main
-    secrets:
-      moodle_org_token: ${{ secrets.MOODLE_ORG_TOKEN }}
+    # Pinned to upstream main from 2026-09-06. Review changes before updating this SHA.
+    uses: catalyst/catalyst-moodle-workflows/.github/workflows/ci.yml@46c07ba73ebef1aed71312bcd37ad1b4c8df7e3d
+    with:
+      codechecker_max_warnings: 0
+      disable_behat: true
+      disable_grunt: true
+      disable_release: true

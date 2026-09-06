@@ -33,7 +33,7 @@ $functions = [
     ],
     'auth_userkey_register_user' => [
         'classname' => 'auth_userkey\\external\\register_user',
-        'description' => 'Create an unconfirmed email-auth user and send a confirmation email',
+        'description' => 'Create an unconfirmed user using the configured registration and confirmation method',
         'type' => 'write',
         'capabilities' => 'auth/userkey:registeruser',
     ],
