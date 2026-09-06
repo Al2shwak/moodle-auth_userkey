@@ -54,6 +54,7 @@ Create a system role with no archetype and grant only:
 - `auth/userkey:authenticate`
 - `auth/userkey:resetpassword`
 - `auth/userkey:generatekey`
+- `moodle/cohort:view`
 - `moodle/cohort:assign`
 - the REST protocol capability required by your Moodle configuration
 
@@ -69,6 +70,7 @@ The service contains:
 | `auth_userkey_authenticate_user` | Validate Moodle credentials and return immutable identity |
 | `auth_userkey_request_password_reset` | Ask Moodle to send its native password-reset email |
 | `auth_userkey_request_login_url` | Create a one-time browser SSO URL for a Moodle user ID |
+| `core_cohort_get_cohorts` | List cohorts visible to the service account |
 | `core_cohort_add_cohort_members` | Activate paid cohort access |
 | `core_cohort_delete_cohort_members` | Revoke paid cohort access |
 | `core_webservice_get_site_info` | Validate the token and integration |
@@ -220,6 +222,18 @@ Send the browser to the URL immediately. It is a short-lived bearer credential a
 cached, exposed to analytics, or fetched speculatively. It is invalidated after use.
 
 ### Cohort access
+
+Retrieve the cohorts available to the service account:
+
+```text
+wsfunction=core_cohort_get_cohorts
+```
+
+Omit `cohortids` to return all cohorts the service account can view, or request specific cohorts with
+`cohortids[0]=42`. Moodle returns each cohort's ID, name, ID number, description, visibility, and custom-field data.
+WordPress should store and submit the immutable numeric `id` for membership changes; names and ID numbers can change.
+The response can include hidden cohorts, so WordPress must expose only the cohorts intended for its own registration
+or product configuration.
 
 Grant access after successful payment:
 
